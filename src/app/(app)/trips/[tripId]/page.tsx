@@ -1,102 +1,150 @@
-import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { computeBalances } from '@/lib/money';
+import { TripMainView } from './TripMainView';
 
 interface TripPageProps {
   params: Promise<{ tripId: string }>;
+  searchParams: Promise<{
+    category?: string;
+    payer?: string;
+    sort?: string;
+  }>;
 }
 
-export default async function TripOverviewPage({ params }: TripPageProps) {
+export default async function TripOverviewPage({ params, searchParams }: TripPageProps) {
   const { tripId } = await params;
-  const supabase = await createClient();
+  const { category, payer, sort = 'date_desc' } = await searchParams;
 
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Load trip details
   const { data: trip } = await supabase
     .from('trips')
     .select('name, budget_paise')
     .eq('id', tripId)
     .single();
 
-  const { data: members } = await supabase
+  // Load members
+  const { data: memberRows } = await supabase
     .from('trip_members')
-    .select('id, display_name, role, user_id, left_at')
-    .eq('trip_id', tripId);
-
-  const { data: expenses } = await supabase
-    .from('expenses')
-    .select('id, title, amount_paise, spent_on, category, paid_by')
+    .select('id, user_id, display_name, role, left_at')
     .eq('trip_id', tripId)
-    .is('deleted_at', null)
-    .order('spent_on', { ascending: false });
+    .is('left_at', null);
 
-  const totalSpentPaise = (expenses || []).reduce((acc, e) => acc + Number(e.amount_paise), 0);
-  const activeMembers = (members || []).filter((m) => !m.left_at);
+  const members = (memberRows || []).map((m) => ({
+    id: m.id,
+    display_name: m.display_name,
+  }));
+
+  const currentMember = (memberRows || []).find((m) => m.user_id === user?.id);
+  const isAdmin = currentMember?.role === 'admin';
+
+  // Build filtered expenses query
+  let expenseQuery = supabase
+    .from('expenses')
+    .select(`
+      id,
+      title,
+      amount_paise,
+      category,
+      paid_by,
+      spent_on,
+      split_type,
+      split_input,
+      note,
+      created_by,
+      version,
+      payer:paid_by (display_name),
+      splits:expense_splits (count)
+    `)
+    .eq('trip_id', tripId)
+    .is('deleted_at', null);
+
+  if (category) {
+    expenseQuery = expenseQuery.eq('category', category);
+  }
+
+  if (payer) {
+    expenseQuery = expenseQuery.eq('paid_by', payer);
+  }
+
+  // Apply sort order
+  if (sort === 'date_asc') {
+    expenseQuery = expenseQuery.order('spent_on', { ascending: true });
+  } else if (sort === 'amount_desc') {
+    expenseQuery = expenseQuery.order('amount_paise', { ascending: false });
+  } else if (sort === 'amount_asc') {
+    expenseQuery = expenseQuery.order('amount_paise', { ascending: true });
+  } else {
+    // Default: date_desc
+    expenseQuery = expenseQuery.order('spent_on', { ascending: false });
+  }
+
+  const { data: expenseRows } = await expenseQuery;
+
+  // Load all non-deleted expenses, splits, and non-voided settlements for global balance computation
+  const { data: allExpenses } = await supabase
+    .from('expenses')
+    .select('id, paid_by, amount_paise, deleted_at')
+    .eq('trip_id', tripId)
+    .is('deleted_at', null);
+
+  const { data: allSplits } = await supabase
+    .from('expense_splits')
+    .select('expense_id, member_id, share_paise')
+    .in('expense_id', (allExpenses || []).map((e) => e.id));
+
+  const { data: allSettlements } = await supabase
+    .from('settlements')
+    .select('id, from_member, to_member, amount_paise, voided_at')
+    .eq('trip_id', tripId)
+    .is('voided_at', null);
+
+  const rawBalances = computeBalances(
+    members,
+    allExpenses || [],
+    allSplits || [],
+    allSettlements || []
+  );
+
+  const balances = members.map((m) => ({
+    id: m.id,
+    display_name: m.display_name,
+    netPaise: rawBalances[m.id] || 0,
+  }));
+
+  const expenses = (expenseRows || []).map((e) => {
+    const payerObj = e.payer as unknown as { display_name?: string } | null;
+    const splitCountObj = e.splits as unknown as Array<{ count?: number }> | null;
+    return {
+      id: e.id,
+      title: e.title,
+      amount_paise: Number(e.amount_paise),
+      category: e.category,
+      paid_by: e.paid_by,
+      spent_on: e.spent_on,
+      split_type: e.split_type,
+      split_input: e.split_input as Record<string, any>,
+      note: e.note,
+      created_by: e.created_by,
+      version: e.version,
+      payerName: payerObj?.display_name || 'Member',
+      splitsCount: splitCountObj?.[0]?.count ?? 0,
+    };
+  });
 
   return (
-    <div className="space-y-8">
-      {/* Budget Summary Bar */}
-      <div className="border border-rule p-4 bg-paper">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-ink-2 gap-2">
-          <div>
-            <span className="font-mono text-ink text-sm tabular-numbers">
-              ₹{(totalSpentPaise / 100).toLocaleString('en-IN')}
-            </span>{' '}
-            spent
-            {trip?.budget_paise && (
-              <span>
-                {' '}
-                of ₹{(trip.budget_paise / 100).toLocaleString('en-IN')} budget
-              </span>
-            )}
-          </div>
-          <div>
-            <span>{activeMembers.length} members on trip</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Expenses & Actions */}
-      <div className="flex items-center justify-between border-b border-rule pb-3">
-        <h2 className="font-serif text-xl font-normal text-ink">
-          Expenses ({expenses?.length || 0})
-        </h2>
-        <Link
-          href={`/trips/${tripId}/expenses/new`}
-          className="text-xs text-brick hover:underline font-medium"
-        >
-          + Add expense
-        </Link>
-      </div>
-
-      {!expenses || expenses.length === 0 ? (
-        <div className="py-12 text-center border-b border-rule">
-          <p className="text-sm text-ink-2">
-            No expenses yet. The first one is usually the hotel or the cab.
-          </p>
-          <div className="mt-4">
-            <Link
-              href={`/trips/${tripId}/expenses/new`}
-              className="inline-block bg-brick hover:bg-brick-dark text-paper px-4 py-2 text-sm font-medium transition-colors"
-            >
-              Add first expense
-            </Link>
-          </div>
-        </div>
-      ) : (
-        <div className="border-t border-rule divide-y divide-rule">
-          {expenses.map((expense) => (
-            <div key={expense.id} className="py-3 flex justify-between items-center text-sm">
-              <div>
-                <p className="font-medium text-ink">{expense.title}</p>
-                <p className="text-xs text-ink-2">{expense.spent_on} • {expense.category}</p>
-              </div>
-              <div className="text-right">
-                <span className="font-mono tabular-numbers text-ink">
-                  ₹{(expense.amount_paise / 100).toLocaleString('en-IN')}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <TripMainView
+      tripId={tripId}
+      totalBudgetPaise={trip?.budget_paise || null}
+      members={members}
+      expenses={expenses}
+      balances={balances}
+      isAdmin={isAdmin}
+      currentMemberId={currentMember?.id}
+    />
   );
 }
