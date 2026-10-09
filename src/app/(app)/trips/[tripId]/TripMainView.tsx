@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { formatPaise } from '@/lib/money';
+import { BudgetBar } from '@/components/BudgetBar';
 import { ExpenseList } from '@/components/ExpenseList';
 import { ExpenseFilters } from '@/components/ExpenseFilters';
 import { BalancesSummary } from '@/components/BalancesSummary';
@@ -39,6 +40,7 @@ interface ExpenseItem {
 interface TripMainViewProps {
   tripId: string;
   totalBudgetPaise: number | null;
+  allTotalSpentPaise?: number;
   members: Member[];
   expenses: ExpenseItem[];
   balances: MemberBalance[];
@@ -49,6 +51,7 @@ interface TripMainViewProps {
 export function TripMainView({
   tripId,
   totalBudgetPaise,
+  allTotalSpentPaise,
   members,
   expenses,
   balances,
@@ -58,7 +61,7 @@ export function TripMainView({
   const [panelOpen, setPanelOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseItem | null>(null);
 
-  const totalSpentPaise = expenses.reduce((acc, e) => acc + e.amount_paise, 0);
+  const totalSpentPaise = allTotalSpentPaise ?? expenses.reduce((acc, e) => acc + e.amount_paise, 0);
 
   function handleOpenAdd() {
     setEditingExpense(null);
@@ -78,22 +81,12 @@ export function TripMainView({
   return (
     <div className="space-y-6">
       {/* Budget Summary Bar */}
-      <div className="border border-rule p-4 bg-paper">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-ink-2 gap-2">
-          <div>
-            <span className="font-mono text-ink text-sm tabular-numbers font-medium">
-              {formatPaise(totalSpentPaise)}
-            </span>{' '}
-            spent
-            {totalBudgetPaise && (
-              <span> of {formatPaise(totalBudgetPaise)} total budget</span>
-            )}
-          </div>
-          <div>
-            <span>{members.length} members on trip</span>
-          </div>
-        </div>
-      </div>
+      <BudgetBar
+        tripId={tripId}
+        totalSpentPaise={totalSpentPaise}
+        budgetPaise={totalBudgetPaise}
+        isAdmin={isAdmin}
+      />
 
       {/* Main responsive grid: 1 column on mobile, 2 columns on tablet/desktop */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
@@ -105,13 +98,13 @@ export function TripMainView({
             <h4 className="font-serif text-sm text-ink font-normal">Quick links</h4>
             <div className="flex flex-col space-y-1.5">
               <Link href={`/trips/${tripId}/people`} className="hover:underline text-ink">
-                Manage members & invite link →
+                Manage members and invite link
               </Link>
               <Link href={`/trips/${tripId}/settle`} className="hover:underline text-ink">
-                View settle up plan →
+                View settle up plan
               </Link>
               <Link href={`/trips/${tripId}/budget`} className="hover:underline text-ink">
-                Category budget limits →
+                Category budget and charts
               </Link>
             </div>
           </div>

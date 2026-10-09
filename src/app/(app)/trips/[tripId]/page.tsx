@@ -136,10 +136,16 @@ export default async function TripOverviewPage({ params, searchParams }: TripPag
     };
   });
 
+  const allTotalSpentPaise = (allExpenses || []).reduce(
+    (acc, e) => acc + Number(e.amount_paise),
+    0
+  );
+
   return (
     <TripMainView
       tripId={tripId}
       totalBudgetPaise={trip?.budget_paise || null}
+      allTotalSpentPaise={allTotalSpentPaise}
       members={members}
       expenses={expenses}
       balances={balances}
