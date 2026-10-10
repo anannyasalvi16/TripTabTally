@@ -83,11 +83,19 @@ export function SettleClientView({
   return (
     <div className="space-y-8 max-w-4xl">
       {/* Header */}
-      <div className="border-b border-rule pb-3">
-        <h2 className="font-serif text-2xl font-normal text-ink">Settle up</h2>
-        <p className="text-xs text-ink-2 mt-1">
-          Minimum payments to clear all debts and record payments.
-        </p>
+      <div className="border-b border-rule pb-3 flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+        <div>
+          <h2 className="font-serif text-2xl font-normal text-ink">Settle up</h2>
+          <p className="text-xs text-ink-2 mt-1">
+            Minimum payments to clear all debts and record payments.
+          </p>
+        </div>
+        <a
+          href={`/api/trips/${tripId}/export`}
+          className="text-xs text-ink-2 hover:text-ink underline underline-offset-2"
+        >
+          Export data to CSV
+        </a>
       </div>
 
       {/* Notices */}

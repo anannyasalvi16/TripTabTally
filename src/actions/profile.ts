@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 
@@ -31,7 +32,7 @@ export type ProfileActionResult = {
 };
 
 export async function updateProfileAction(
-  prevState: ProfileActionResult | null,
+  _prevState: ProfileActionResult | null,
   formData: FormData
 ): Promise<ProfileActionResult> {
   const displayName = String(formData.get('displayName') || '');
@@ -72,4 +73,51 @@ export async function updateProfileAction(
 
   revalidatePath('/profile');
   return { ok: true, message: 'Profile updated.' };
+}
+
+export async function deleteAccountAction(
+  _prevState: ProfileActionResult | null,
+  formData: FormData
+): Promise<ProfileActionResult> {
+  const confirmed = formData.get('confirm') === 'yes';
+  if (!confirmed) {
+    return { ok: false, message: 'Please confirm account deletion before proceeding.' };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { ok: false, message: 'Authentication required.' };
+  }
+
+  // 1. Anonymize member names on all trips where this user participated
+  const { error: memberError } = await supabase
+    .from('trip_members')
+    .update({
+      display_name: 'Former member',
+      user_id: null,
+    })
+    .eq('user_id', user.id);
+
+  if (memberError) {
+    return { ok: false, message: 'Could not anonymise trip member history. Please try again.' };
+  }
+
+  // 2. Delete user profile
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .delete()
+    .eq('id', user.id);
+
+  if (profileError) {
+    return { ok: false, message: 'Could not delete profile record. Please try again.' };
+  }
+
+  // 3. Sign out session
+  await supabase.auth.signOut();
+
+  redirect('/login');
 }
