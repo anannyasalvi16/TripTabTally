@@ -55,10 +55,11 @@ export function ProfileForm({
       {/* Profile details form */}
       <form action={updateFormAction} className="space-y-4">
         <div>
-          <label className="block text-xs font-medium text-ink-2 mb-1">
+          <label htmlFor="email" className="block text-xs font-medium text-ink-2 mb-1">
             Email address
           </label>
           <input
+            id="email"
             type="email"
             disabled
             value={email}

@@ -1,19 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-
-function getSafeNextPath(rawNext: string | null): string {
-  if (!rawNext) return '/trips';
-  // Prevent open redirect attacks
-  if (rawNext.startsWith('/') && !rawNext.startsWith('//') && !rawNext.includes('\\')) {
-    return rawNext;
-  }
-  return '/trips';
-}
+import { sanitizeNextUrl } from '@/lib/security';
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  const next = getSafeNextPath(searchParams.get('next'));
+  const next = sanitizeNextUrl(searchParams.get('next'));
 
   if (code) {
     const supabase = await createClient();

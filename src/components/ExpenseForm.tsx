@@ -331,7 +331,7 @@ export function ExpenseForm({
                     }`}
                   >
                     <span>{m.display_name}</span>
-                    <span>{isSelected ? '✓' : ''}</span>
+                    <span className="font-mono text-xs text-ink">{isSelected ? '[x]' : '[ ]'}</span>
                   </button>
                 );
               })}

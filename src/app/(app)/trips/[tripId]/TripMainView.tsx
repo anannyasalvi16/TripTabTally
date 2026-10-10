@@ -95,7 +95,7 @@ export function TripMainView({
           <BalancesSummary balances={balances} />
 
           <div className="border border-rule p-4 bg-paper text-xs text-ink-2 space-y-2">
-            <h4 className="font-serif text-sm text-ink font-normal">Quick links</h4>
+            <h2 className="font-serif text-sm text-ink font-normal">Quick links</h2>
             <div className="flex flex-col space-y-1.5">
               <Link href={`/trips/${tripId}/people`} className="hover:underline text-ink">
                 Manage members and invite link
