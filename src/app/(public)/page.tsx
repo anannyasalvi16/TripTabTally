@@ -79,10 +79,12 @@ export default function LandingPage() {
 
       <footer className="border-t border-rule px-4 py-6 sm:px-8 text-xs text-ink-2">
         <div className="max-w-ledger mx-auto flex flex-col sm:flex-row justify-between gap-4">
-          <div>
-            <span>Settlement calculated using greedy debt simplification. All money stored in integer paise.</span>
+          <div className="space-y-1">
+            <p>Settlement calculated using greedy debt simplification. Balances always sum to zero.</p>
+            <p>Export trip expenses and settlements to CSV at any time.</p>
           </div>
-          <div className="flex space-x-4">
+          <div className="flex flex-wrap items-baseline gap-4">
+            <span>contact: hello@triptabtally.in</span>
             <span>Version 0.1.0</span>
             <Link href="/login" className="hover:underline text-ink">
               Sign in

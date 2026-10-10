@@ -106,6 +106,12 @@ export function TripMainView({
               <Link href={`/trips/${tripId}/budget`} className="hover:underline text-ink">
                 Category budget and charts
               </Link>
+              <a
+                href={`/api/trips/${tripId}/export`}
+                className="hover:underline text-ink"
+              >
+                Export data to CSV
+              </a>
             </div>
           </div>
         </div>
