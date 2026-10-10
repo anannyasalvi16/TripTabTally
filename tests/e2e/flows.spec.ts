@@ -24,8 +24,8 @@ test.describe('TRD Section 14 End-to-End User Journeys and Accessibility', () =>
     await expect(page.locator('text=Airport Cab')).toBeVisible();
 
     // 3. Confirm group balances and members are visible
-    await expect(page.locator('text=Rohan Mehta').first()).toBeVisible();
-    await expect(page.locator('text=Meera Iyer').first()).toBeVisible();
+    await expect(page.locator('span').filter({ hasText: 'Rohan Mehta' }).first()).toBeVisible();
+    await expect(page.locator('span').filter({ hasText: 'Meera Iyer' }).first()).toBeVisible();
 
     // 4. Navigate to Add Expense page
     await page.goto(`/trips/${tripId}/expenses/new`);
