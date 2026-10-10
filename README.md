@@ -1,106 +1,240 @@
 # TripTabTally
 
-A ledger web application for friends on a group trip to plan a shared budget, record who paid for what, and settle up with the fewest possible payments.
+A group trip budget, expense ledger, and greedy debt simplification web application built for friends traveling together.
 
 Live preview: https://triptabtally.vercel.app  
+Repository: https://github.com/anannyasalvi16/TripTabTally  
 Active usage: 18 users across 4 completed trips.
 
-## Why TripTabTally
+---
 
-On group trips, expenses are scattered across cabs, meals, hotels, and tickets. Existing apps often lack a shared trip budget, restrict free usage, or do not support direct Indian payment flows. TripTabTally provides:
+## 1. Interface and Visual Highlights
 
-1. Fast trip setup and 14-day shareable invite links with placeholder claim.
-2. Four mathematically exact split modes: equal, exact amounts, percentages, and integer shares.
-3. Live balances that continuously verify a zero-sum invariant.
-4. Greedy debt simplification that clears all balances in at most (n - 1) transfers.
-5. Direct UPI deep links (upi://pay) for mobile settlement with one-click copy on desktop.
-6. Hand-crafted SVG charts for category and daily spend without third-party chart libraries.
-7. Plain text templates for computed insights and full CSV export of expenses and settlements.
+TripTabTally is styled with a warm paper aesthetic, zero border radius, zero shadows, and strict typographic hierarchy.
 
-## Design Principles and Rules
+### Trip Ledger and Live Balances
+![Trip Ledger](screenshots/step3/trip_ledger_1280x800.png)
+*The trip dashboard provides quick metrics, category breakdown, zero-sum member balances, and full expense ledger with real-time URL filtering.*
 
-TripTabTally adheres to strict interface rules:
+### Expense Entry and Mathematical Splits
+![Add Expense Form](screenshots/step3/add_expense_1280x800.png)
+*Record shared costs with instant live breakdown across all four split algorithms (equal, exact, percentage, shares).*
 
-- Border radius 0 everywhere (rounded-none across buttons, inputs, tags, and containers).
-- No box shadows, no gradients, no glassmorphism, and no blur filters.
-- Warm paper palette: paper (#F5F1E8), paper-2 (#EBE5D6), rule (#C9C1AE), ink (#1D1B17), ink-2 (#5A554B), brick (#9E3B1E), and moss (#2E5E3E).
-- Text labels preferred over icons: fewer than 5 icons in the entire application.
-- No emoji anywhere in copy, empty states, code, or seed data.
-- No em dashes in documentation, user interface copy, comments, or commit messages.
-- Tabular monospace numbers for all money amounts with Indian currency grouping (for example: ₹1,23,456.78).
+### Settle Up and Greedy Payment Plan
+![Settle Up View](screenshots/step3/settle_up_1280x800.png)
+*Greedy debt simplification minimizes the number of transfers to clear all debts, coupled with direct Indian UPI deep links and copy actions.*
 
-## Money Engine and Settlement Math
+### Budget and Category Limits
+![Budget and Category Analytics](screenshots/step3/budget_1280x800.png)
+*Category spending bars, progress indicators, and custom SVG charts rendered without external visualization libraries.*
 
-All monetary values are calculated and stored as integer paise. Floating-point numbers are never used for currency arithmetic.
+---
 
-### 1. Split Calculations
-- Equal Split: Divides total paise evenly among participants. Leftover paise are distributed deterministically using a hash of the expense identifier, ensuring the exact sum matches the total without always burdening the first participant.
-- Percentage and Share Splits: Calculated using the Largest Remainder Method (Hare-Niemeyer method). Raw shares are floored, and leftover paise are assigned to the largest fractional remainders.
-- Exact Split: Enforces that user-entered amounts sum precisely to the total expense amount. Any mismatch blocks submission and displays the exact unassigned amount.
+## 2. Core Capabilities
 
-### 2. Zero-Sum Invariant
-Every expense and settlement strictly maintains zero net change across the group:
-Sum of all net balances = 0
+1. **Trip Lifecycle**: Create trips, set overall rupee budgets, and generate 14-day shareable invite links.
+2. **Placeholder Member System**: Add friends before they sign up. When invited friends open the invite link, they can claim their placeholder or join as new members.
+3. **Four Exact Split Modes**:
+   - Equal split with deterministic hash-based remainder distribution.
+   - Exact amounts with live validation against the total.
+   - Percentages using the Largest Remainder Method (Hare-Niemeyer method).
+   - Integer shares for couples, families, or weighted consumption.
+4. **Zero-Sum Balance Verification**: Live checks ensure the sum of all participant balances is always exactly zero.
+5. **Greedy Debt Simplification**: Converts multi-party group debts into at most (k - 1) simple settlement payments.
+6. **Indian Payment Rails**: Direct UPI deep links (`upi://pay`) for mobile settlement and instant UPI ID copy for desktop users.
+7. **Budget Tracking and Category Limits**: Set spending caps on stay, food, transport, activities, shopping, and other categories.
+8. **Data Portability**: Full CSV export of expenses and settlements at any time.
+9. **Account Privacy**: Clean account deletion with member anonymization to preserve ledger integrity for fellow trip participants.
 
-### 3. Greedy Debt Simplification
-The settlement engine partitions participants into debtors (negative balance) and creditors (positive balance), sorted by descending magnitude. It iteratively transfers the minimum of the highest debtor and highest creditor until all balances reach zero. This guarantees complete debt clearance in no more than (k - 1) transfers, where k is the number of participants with non-zero balances.
+---
 
-## Tech Stack
+## 3. Design Principles and Rules
 
-- Framework: Next.js 15 (App Router) in TypeScript strict mode.
-- Database and Auth: Supabase (PostgreSQL with Row Level Security, magic link, Google OAuth) via @supabase/ssr.
-- Styling: Tailwind CSS with custom design tokens.
-- Validation: Zod schemas shared between client and server.
-- Unit and Property Testing: Vitest (77 tests covering RLS, money logic, property tests, UPI, and insights).
-- End-to-End Testing: Playwright.
-- Fonts: Newsreader, IBM Plex Sans, IBM Plex Mono via next/font/google.
+TripTabTally strictly adheres to minimalist, anti-slop interface rules:
 
-## Local Development
+- **Border Radius**: 0px everywhere (`rounded-none` across all buttons, inputs, tags, dialogs, and containers).
+- **Surface Elevation**: No box shadows, no elevation layers, no gradients, and no backdrop blurs.
+- **Color Palette**:
+  - Paper (`#F5F1E8` light / `#17150F` dark)
+  - Paper 2 (`#ECE6D6` light / `#221F17` dark)
+  - Rule line (`#C9C1AE` light / `#3A362C` dark)
+  - Ink primary (`#1D1B17` light / `#ECE6D6` dark)
+  - Ink muted (`#5A554A` light / `#A8A190` dark)
+  - Brick accent (`#9E3B1E` light / `#D2694A` dark)
+  - Moss positive (`#2E5E3E` light / `#4E8E62` dark)
+- **Typography**: Newsreader (serif headlines), IBM Plex Sans (body text), and IBM Plex Mono (tabular numbers and codes).
+- **Icons and Glyphs**: Fewer than 5 icons across the entire application. Clear text labels and ledger notations (`[x]`, `[ ]`) are preferred over pictorial glyphs.
+- **Tone**: Zero emoji and zero em dashes in copy, empty states, commit messages, and documentation.
+
+---
+
+## 4. Money Engine and Mathematics
+
+All monetary operations avoid floating-point numbers by storing and calculating values strictly as integer paise (1 Rupee = 100 paise).
+
+### 4.1 Split Calculations
+
+#### Equal Split
+Divides the total paise `T` evenly among `n` members:
+```
+base_share = floor(T / n)
+leftover_paise = T - (base_share * n)
+```
+Leftover paise are assigned deterministically using a SHA-256 hash of the expense description or ID modulo `n`. This prevents rounding errors and ensures the first person in the list does not bear an unfair rounding bias across multiple expenses.
+
+#### Percentage and Share Splits (Largest Remainder Method)
+Given a total `T` and weights or percentages:
+1. Compute exact decimal quota for each participant: `quota_i = T * (weight_i / total_weight)`.
+2. Assign each participant integer paise: `share_i = floor(quota_i)`.
+3. Compute fractional remainder for each participant: `rem_i = quota_i - share_i`.
+4. Calculate unassigned paise: `R = T - sum(share_i)`.
+5. Sort participants by descending remainder `rem_i` and distribute 1 extra paisa to the top `R` participants.
+
+#### Exact Split
+Requires users to enter rupee amounts per participant. The engine verifies that:
+```
+sum(entered_paise) == total_expense_paise
+```
+Any mismatch blocks form submission and displays the remaining unassigned amount in real time.
+
+### 4.2 Zero-Sum Invariant
+For every expense and settlement, net changes across the group must sum to zero:
+```
+sum(net_balances) = 0
+```
+This invariant is asserted across the application and verified via automated property-based tests.
+
+### 4.3 Greedy Debt Simplification
+The settlement engine groups participants with non-zero balances into debtors (`balance < 0`) and creditors (`balance > 0`).
+
+```
+Algorithm GreedySettlement:
+1. Partition members into Creditors (C) and Debtors (D).
+2. Sort C in descending order of credit.
+3. Sort D in descending order of debt magnitude.
+4. While C and D are both non-empty:
+     c = head(C), d = head(D)
+     transfer_amount = min(c.credit, d.debt)
+     Record transfer: d pays c transfer_amount
+     c.credit -= transfer_amount
+     d.debt -= transfer_amount
+     If c.credit == 0, remove c from C
+     If d.debt == 0, remove d from D
+```
+
+**Complexity and Bound**:
+The algorithm runs in `O(k log k)` time (dominated by sorting) where `k` is the number of participants with non-zero balances. It guarantees that all balances reach zero in at most `(k - 1)` transfers.
+
+---
+
+## 5. Security Model
+
+1. **Row Level Security (RLS)**:
+   - Enabled on all 8 tables in PostgreSQL (`profiles`, `trips`, `trip_members`, `expenses`, `expense_splits`, `settlements`, `category_limits`, `invites`).
+   - Non-members cannot read or write any trip records. Attempting to access an unauthorized trip returns a designed 404 page.
+2. **Security Definer Entry Points**:
+   - Only three transactional functions use `security definer`: `create_trip`, `join_trip`, and `save_expense`.
+   - Each entry point verifies caller authentication (`auth.uid() is not null`), input bounds, and optimistic concurrency version numbers.
+3. **No Service Role Key in Runtime**:
+   - The application uses only `NEXT_PUBLIC_SUPABASE_ANON_KEY`. The service role key is never bundled, logged, or exposed in server actions.
+4. **HTTP Security Headers**:
+   - Enforced in `next.config.mjs`: `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, and `Permissions-Policy`.
+5. **Open Redirect Protection**:
+   - The `sanitizeNextUrl` security utility validates all `?next=...` query parameters to prevent protocol-relative (`//`) or external redirection attacks.
+
+---
+
+## 6. Architecture and Tech Stack
+
+- **Framework**: Next.js 15 (App Router) with TypeScript in strict mode.
+- **Database and Auth**: Supabase (PostgreSQL 15 with RLS, Magic Link, Google OAuth) via `@supabase/ssr`.
+- **Styling**: Tailwind CSS with custom design tokens.
+- **Validation**: Zod schemas shared between client forms and server actions.
+- **Testing**:
+  - Vitest: Unit and property-based mathematical testing.
+  - Playwright: End-to-end user journeys and automated Axe accessibility audits.
+- **Fonts**: Newsreader, IBM Plex Sans, IBM Plex Mono via `next/font/google`.
+- **Infrastructure**: Vercel Serverless Functions deployed to Mumbai (`bom1`) co-located with Supabase in Mumbai (`ap-south-1`).
+
+---
+
+## 7. Local Development Setup
 
 ### Prerequisites
-- Node.js 20 or later.
-- Docker (for local Supabase CLI) or a remote Supabase project.
+- Node.js 20 or later
+- npm 10 or later
 
-### Setup Steps
+### Installation
 
-1. Clone the repository and install dependencies:
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/anannyasalvi16/TripTabTally.git
+   cd TripTabTally
+   ```
+
+2. Install dependencies:
+   ```bash
    npm install
+   ```
 
-2. Configure environment variables in a .env.local file (see .env.example):
+3. Create local environment file:
+   ```bash
+   cp .env.example .env.local
+   ```
+
+4. Configure `.env.local`:
+   ```env
    NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-local-or-project-anon-key
    NEXT_PUBLIC_SITE_URL=http://localhost:3000
+   ```
 
-3. Run Supabase migrations and seed:
-   npx supabase db reset
+5. Start local mock database (or local Supabase container):
+   ```bash
+   node scripts/mock-supabase.mjs
+   ```
 
-4. Run the development server:
+6. Start Next.js development server:
+   ```bash
    npm run dev
+   ```
 
-Open http://localhost:3000 in your browser.
+7. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Test and Verification Suite
+---
 
-Run all verification scripts:
+## 8. Automated Verification Suite
 
-- Unit and property tests:
-  npm run test
+Run all quality checks locally:
 
-- Anti-slop rule enforcement:
-  npm run check:anti-slop
+```bash
+# Typecheck
+npm run typecheck
 
-- Typecheck:
-  npm run typecheck
+# Lint
+npm run lint
 
-- Lint:
-  npm run lint
+# Anti-slop enforcement (zero emoji, zero em-dashes, token rules)
+npm run check:anti-slop
 
-- Production build:
-  npm run build
+# Vitest suite (77 unit, property, and RLS tests)
+npm test
 
-- End-to-end tests:
-  npm run test:e2e
+# Production build verification
+npm run build
 
-## License
+# Playwright suite (72 end-to-end and responsive viewport tests)
+npm run test:e2e
+```
+
+---
+
+## 9. Production Deployment
+
+Refer to [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions, Supabase migration runs, and Vercel configuration in the Mumbai (`bom1`) region.
+
+---
+
+## 10. License
 
 MIT
