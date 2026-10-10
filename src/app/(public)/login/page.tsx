@@ -4,10 +4,11 @@ import { Suspense, useActionState, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { signInWithOtp, signInWithGoogle, type AuthActionResult } from '@/actions/auth';
+import { sanitizeNextUrl } from '@/lib/security';
 
 function LoginForm() {
   const searchParams = useSearchParams();
-  const next = searchParams.get('next') || '/trips';
+  const next = sanitizeNextUrl(searchParams.get('next'));
   const errorParam = searchParams.get('error');
 
   const [state, formAction, isPending] = useActionState<AuthActionResult | null, FormData>(
@@ -36,14 +37,16 @@ function LoginForm() {
   }
 
   return (
-    <div className="max-w-form w-full border border-rule p-8 bg-paper">
-      <span className="font-mono text-xs text-ink-2 block mb-2">Sign in</span>
-      <h1 className="font-serif text-2xl font-normal text-ink">
-        Access your trip ledgers
-      </h1>
-      <p className="mt-2 text-sm text-ink-2">
-        Enter your email to receive a sign-in link, or continue with Google.
-      </p>
+    <div className="max-w-form w-full py-8">
+      <div className="border-b border-rule pb-4 mb-6">
+        <span className="font-mono text-xs text-ink-2 block mb-2">Sign in</span>
+        <h1 className="font-serif text-3xl font-normal text-ink">
+          Access your trip ledgers
+        </h1>
+        <p className="mt-2 text-sm text-ink-2">
+          Enter your email to receive a sign-in link, or continue with Google.
+        </p>
+      </div>
 
       {errorParam && (
         <div className="mt-4 p-3 border border-brick text-brick text-sm bg-paper-2">

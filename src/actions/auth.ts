@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import { sanitizeNextUrl } from '@/lib/security';
 
 const emailSchema = z.string().email('Please enter a valid email address.');
 
@@ -17,7 +18,7 @@ export async function signInWithOtp(
   formData: FormData
 ): Promise<AuthActionResult> {
   const email = formData.get('email');
-  const next = formData.get('next');
+  const rawNext = formData.get('next');
 
   if (typeof email !== 'string') {
     return { ok: false, message: 'Email address is required.' };
@@ -30,8 +31,8 @@ export async function signInWithOtp(
 
   const validEmail = parseResult.data;
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-  const nextParam = typeof next === 'string' && next ? encodeURIComponent(next) : '%2Ftrips';
-  const emailRedirectTo = `${siteUrl}/auth/callback?next=${nextParam}`;
+  const safeNext = sanitizeNextUrl(typeof rawNext === 'string' ? rawNext : null);
+  const emailRedirectTo = `${siteUrl}/auth/callback?next=${encodeURIComponent(safeNext)}`;
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({
@@ -53,8 +54,8 @@ export async function signInWithOtp(
 
 export async function signInWithGoogle(nextPath?: string): Promise<AuthActionResult> {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-  const nextParam = nextPath ? encodeURIComponent(nextPath) : '%2Ftrips';
-  const redirectTo = `${siteUrl}/auth/callback?next=${nextParam}`;
+  const safeNext = sanitizeNextUrl(nextPath);
+  const redirectTo = `${siteUrl}/auth/callback?next=${encodeURIComponent(safeNext)}`;
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithOAuth({

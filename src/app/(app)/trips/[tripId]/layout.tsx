@@ -118,7 +118,7 @@ export default async function TripLayout({ children, params }: TripLayoutProps) 
             </div>
           </div>
 
-          <nav className="flex space-x-6 mt-6 border-b border-rule -mb-px text-sm">
+          <nav aria-label="Trip tabs navigation" className="flex space-x-6 mt-6 border-b border-rule -mb-px text-sm">
             {tabs.map((tab) => (
               <Link
                 key={tab.href}

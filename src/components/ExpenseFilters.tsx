@@ -41,6 +41,7 @@ export function ExpenseFilters({ members }: ExpenseFiltersProps) {
     <div className="flex flex-wrap items-center gap-2 py-3 border-b border-rule text-xs">
       {/* Category Filter */}
       <select
+        aria-label="Filter expenses by category"
         value={currentCategory}
         onChange={(e) => updateFilter('category', e.target.value)}
         className="border border-rule bg-paper-2 px-2.5 py-1 text-xs text-ink focus:border-brick capitalize"
@@ -55,6 +56,7 @@ export function ExpenseFilters({ members }: ExpenseFiltersProps) {
 
       {/* Payer Filter */}
       <select
+        aria-label="Filter expenses by payer"
         value={currentPayer}
         onChange={(e) => updateFilter('payer', e.target.value)}
         className="border border-rule bg-paper-2 px-2.5 py-1 text-xs text-ink focus:border-brick"
@@ -69,6 +71,7 @@ export function ExpenseFilters({ members }: ExpenseFiltersProps) {
 
       {/* Sorting */}
       <select
+        aria-label="Sort expenses"
         value={currentSort}
         onChange={(e) => updateFilter('sort', e.target.value)}
         className="border border-rule bg-paper-2 px-2.5 py-1 text-xs text-ink focus:border-brick"

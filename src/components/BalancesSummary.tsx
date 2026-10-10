@@ -16,9 +16,9 @@ export function BalancesSummary({ balances }: BalancesSummaryProps) {
   return (
     <div className="border border-rule p-4 bg-paper space-y-3">
       <div className="flex items-center justify-between border-b border-rule pb-2">
-        <h3 className="font-serif text-lg font-normal text-ink">
+        <h2 className="font-serif text-lg font-normal text-ink">
           Group balances
-        </h3>
+        </h2>
         <span className="text-xs text-ink-2">Net position</span>
       </div>
 

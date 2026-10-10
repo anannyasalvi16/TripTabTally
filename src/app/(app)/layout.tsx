@@ -34,7 +34,7 @@ export default async function AppLayout({
             <Link href="/trips" className="font-serif text-xl font-normal text-ink">
               TripTabTally
             </Link>
-            <nav className="hidden sm:flex items-center space-x-4 text-sm">
+            <nav aria-label="Main navigation" className="hidden sm:flex items-center space-x-4 text-sm">
               <Link href="/trips" className="text-ink hover:underline">
                 Trips
               </Link>

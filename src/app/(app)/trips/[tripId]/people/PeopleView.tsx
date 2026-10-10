@@ -123,6 +123,8 @@ export function PeopleView({
           <div className="space-y-3">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <input
+                id="inviteUrl"
+                aria-label="Trip invite link"
                 type="text"
                 readOnly
                 value={inviteUrl}
