@@ -13,19 +13,19 @@ Active usage: 18 users across 4 completed trips.
 TripTabTally is styled with a warm paper aesthetic, zero border radius, zero shadows, and strict typographic hierarchy.
 
 ### Trip Ledger and Live Balances
-![Trip Ledger](screenshots/step3/trip_ledger_1280x800.png)
+![Trip Ledger](docs/screenshots/trip_ledger.png)
 *The trip dashboard provides quick metrics, category breakdown, zero-sum member balances, and full expense ledger with real-time URL filtering.*
 
 ### Expense Entry and Mathematical Splits
-![Add Expense Form](screenshots/step3/add_expense_1280x800.png)
+![Add Expense Form](docs/screenshots/add_expense.png)
 *Record shared costs with instant live breakdown across all four split algorithms (equal, exact, percentage, shares).*
 
 ### Settle Up and Greedy Payment Plan
-![Settle Up View](screenshots/step3/settle_up_1280x800.png)
+![Settle Up View](docs/screenshots/settle_up.png)
 *Greedy debt simplification minimizes the number of transfers to clear all debts, coupled with direct Indian UPI deep links and copy actions.*
 
 ### Budget and Category Limits
-![Budget and Category Analytics](screenshots/step3/budget_1280x800.png)
+![Budget and Category Analytics](docs/screenshots/budget.png)
 *Category spending bars, progress indicators, and custom SVG charts rendered without external visualization libraries.*
 
 ---
