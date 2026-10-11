@@ -166,8 +166,9 @@ export function JoinClientView({
         </div>
       </main>
 
-      <footer className="border-t border-rule px-4 py-4 text-center text-xs text-ink-2">
-        <span>TripTabTally • Shared group ledger</span>
+      <footer className="border-t border-rule px-4 py-4 text-center text-xs text-ink-2 space-y-1">
+        <div>TripTabTally. Shared group ledger.</div>
+        <div>Made by Anannya Salvi, 2026</div>
       </footer>
     </div>
   );

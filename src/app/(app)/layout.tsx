@@ -60,6 +60,12 @@ export default async function AppLayout({
       </header>
 
       <main className="flex-1">{children}</main>
+      <footer className="border-t border-rule px-4 py-4 sm:px-8 text-xs text-ink-2 bg-paper">
+        <div className="max-w-ledger mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
+          <span>TripTabTally. Shared group ledger.</span>
+          <span>Made by Anannya Salvi, 2026</span>
+        </div>
+      </footer>
     </div>
   );
 }

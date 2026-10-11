@@ -82,6 +82,7 @@ export default function LandingPage() {
           <div className="space-y-1">
             <p>Settlement calculated using greedy debt simplification. Balances always sum to zero.</p>
             <p>Export trip expenses and settlements to CSV at any time.</p>
+            <p className="text-ink font-medium pt-1">Made by Anannya Salvi, 2026</p>
           </div>
           <div className="flex flex-wrap items-baseline gap-4">
             <span>contact: hello@triptabtally.in</span>

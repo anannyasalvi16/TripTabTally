@@ -145,8 +145,9 @@ export default function LoginPage() {
         </Suspense>
       </main>
 
-      <footer className="border-t border-rule px-4 py-4 text-center text-xs text-ink-2">
-        <span>No passwords stored. Sessions expire automatically.</span>
+      <footer className="border-t border-rule px-4 py-4 text-center text-xs text-ink-2 space-y-1">
+        <div>No passwords stored. Sessions expire automatically.</div>
+        <div>Made by Anannya Salvi, 2026</div>
       </footer>
     </div>
   );
