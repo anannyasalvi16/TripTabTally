@@ -2,8 +2,8 @@
 
 A group trip budget, expense ledger, and greedy debt simplification web application built for friends traveling together.
 
-Live preview: https://triptabtally.vercel.app  
-Repository: https://github.com/anannyasalvi16/TripTabTally  
+Live application: [https://triptabtally.vercel.app](https://triptabtally.vercel.app)  
+Repository: [https://github.com/anannyasalvi16/TripTabTally](https://github.com/anannyasalvi16/TripTabTally)  
 Active usage: 18 users across 4 completed trips.
 
 ---
@@ -154,6 +154,7 @@ The algorithm runs in `O(k log k)` time (dominated by sorting) where `k` is the 
   - Vitest: Unit and property-based mathematical testing.
   - Playwright: End-to-end user journeys and automated Axe accessibility audits.
 - **Fonts**: Newsreader, IBM Plex Sans, IBM Plex Mono via `next/font/google`.
+- **Performance and Observability**: Vercel Speed Insights (`@vercel/speed-insights/next`) tracking real user Core Web Vitals.
 - **Infrastructure**: Vercel Serverless Functions deployed to Mumbai (`bom1`) co-located with Supabase in Mumbai (`ap-south-1`).
 
 ---

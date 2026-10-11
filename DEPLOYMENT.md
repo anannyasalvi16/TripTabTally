@@ -118,3 +118,8 @@ Once Vercel completes the build and deployment:
 
 5. **Data Export**:
    - Navigate to export endpoint `/api/trips/<tripId>/export` and confirm CSV download containing expenses and settlements.
+
+6. **Performance Monitoring**:
+   - Vercel Speed Insights is integrated via `@vercel/speed-insights/next` in the root layout.
+   - Real-world Core Web Vitals (FCP, LCP, CLS) populate automatically in the Vercel project dashboard under the Speed Insights tab.
+
