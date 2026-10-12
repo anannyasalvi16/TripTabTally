@@ -44,6 +44,16 @@ describe('Trip Schema Validation', () => {
     }
   });
 
+  it('accepts same-day trip where end date equals start date', () => {
+    const valid = tripSchema.safeParse({
+      name: 'Day Trip to Alibaug',
+      startDate: '2026-12-15',
+      endDate: '2026-12-15',
+      displayName: 'Rohan',
+    });
+    expect(valid.success).toBe(true);
+  });
+
   it('accepts optional dates and budget', () => {
     const valid = tripSchema.safeParse({
       name: 'Weekend Getaway',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import Link from 'next/link';
 import { createTripAction, type TripActionResult } from '@/actions/trips';
 
@@ -9,6 +9,10 @@ export default function NewTripPage() {
     createTripAction,
     null
   );
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  const isInvalidDateRange = Boolean(startDate && endDate && endDate < startDate);
 
   return (
     <div className="px-4 py-8 sm:px-8 max-w-form mx-auto">
@@ -78,6 +82,15 @@ export default function NewTripPage() {
               id="startDate"
               name="startDate"
               type="date"
+              value={startDate}
+              max={endDate || undefined}
+              onChange={(e) => {
+                const val = e.target.value;
+                setStartDate(val);
+                if (endDate && val && endDate < val) {
+                  setEndDate(val);
+                }
+              }}
               className="w-full border border-rule bg-paper-2 px-3 py-2 text-sm text-ink focus:border-brick"
             />
             {state?.fieldErrors?.startDate && (
@@ -93,10 +106,15 @@ export default function NewTripPage() {
               id="endDate"
               name="endDate"
               type="date"
+              value={endDate}
+              min={startDate || undefined}
+              onChange={(e) => setEndDate(e.target.value)}
               className="w-full border border-rule bg-paper-2 px-3 py-2 text-sm text-ink focus:border-brick"
             />
-            {state?.fieldErrors?.endDate && (
-              <p className="mt-1 text-xs text-brick">{state.fieldErrors.endDate}</p>
+            {(state?.fieldErrors?.endDate || isInvalidDateRange) && (
+              <p className="mt-1 text-xs text-brick">
+                {state?.fieldErrors?.endDate || 'End date cannot be earlier than start date.'}
+              </p>
             )}
           </div>
         </div>
@@ -148,7 +166,7 @@ export default function NewTripPage() {
         <div className="pt-2">
           <button
             type="submit"
-            disabled={isPending}
+            disabled={isPending || isInvalidDateRange}
             className="w-full sm:w-auto bg-brick hover:bg-brick-dark text-paper px-6 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
           >
             {isPending ? 'Creating trip...' : 'Create trip'}
