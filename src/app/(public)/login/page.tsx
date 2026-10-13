@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useActionState, useState } from 'react';
+import { Suspense, useActionState, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { signInWithOtp, signInWithGoogle, type AuthActionResult } from '@/actions/auth';
@@ -18,6 +18,25 @@ function LoginForm() {
 
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
+  useEffect(() => {
+    if (state?.ok) {
+      setCooldown(60);
+    }
+  }, [state]);
+
+  const isRateLimited = Boolean(
+    state && !state.ok && state.message && state.message.toLowerCase().includes('rate limit')
+  );
 
   async function handleGoogleClick() {
     setGoogleLoading(true);
@@ -55,8 +74,13 @@ function LoginForm() {
       )}
 
       {state && !state.ok && state.message && (
-        <div className="mt-4 p-3 border border-brick text-brick text-sm bg-paper-2">
-          {state.message}
+        <div className="mt-4 p-3 border border-brick text-brick text-sm bg-paper-2 space-y-1">
+          <p className="font-medium">{state.message}</p>
+          {isRateLimited && (
+            <p className="text-xs text-ink-2 pt-1 border-t border-rule">
+              Tip: Google authentication below is unaffected by email limits and works immediately.
+            </p>
+          )}
         </div>
       )}
 
@@ -67,9 +91,14 @@ function LoginForm() {
       )}
 
       {state && state.ok && state.message ? (
-        <div className="mt-6 p-4 border border-moss text-moss text-sm bg-paper-2">
+        <div className="mt-6 p-4 border border-moss text-moss text-sm bg-paper-2 space-y-2">
           <p className="font-medium">Link sent</p>
-          <p className="mt-1 text-ink">{state.message}</p>
+          <p className="text-ink">{state.message}</p>
+          {cooldown > 0 && (
+            <p className="text-xs text-ink-2">
+              Resend available in {cooldown}s.
+            </p>
+          )}
         </div>
       ) : (
         <form action={formAction} className="mt-6 space-y-4">
@@ -93,10 +122,14 @@ function LoginForm() {
 
           <button
             type="submit"
-            disabled={isPending}
+            disabled={isPending || cooldown > 0}
             className="w-full bg-brick hover:bg-brick-dark text-paper px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
           >
-            {isPending ? 'Sending magic link...' : 'Send magic link'}
+            {isPending
+              ? 'Sending magic link...'
+              : cooldown > 0
+              ? `Wait ${cooldown}s to resend`
+              : 'Send magic link'}
           </button>
         </form>
       )}
@@ -111,7 +144,9 @@ function LoginForm() {
         type="button"
         onClick={handleGoogleClick}
         disabled={googleLoading}
-        className="w-full border border-ink text-ink hover:bg-paper-2 px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+        className={`w-full border text-ink hover:bg-paper-2 px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50 ${
+          isRateLimited ? 'border-brick bg-paper-2 font-semibold' : 'border-ink'
+        }`}
       >
         {googleLoading ? 'Connecting to Google...' : 'Continue with Google'}
       </button>

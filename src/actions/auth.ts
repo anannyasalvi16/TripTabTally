@@ -43,6 +43,18 @@ export async function signInWithOtp(
   });
 
   if (error) {
+    const isRateLimit =
+      error.status === 429 ||
+      error.message.toLowerCase().includes('rate limit');
+
+    if (isRateLimit) {
+      return {
+        ok: false,
+        message:
+          'Supabase email rate limit reached (free default SMTP allows 3 emails per hour). Please wait a few minutes, or use Continue with Google below for instant sign-in.',
+      };
+    }
+
     return { ok: false, message: error.message };
   }
 
