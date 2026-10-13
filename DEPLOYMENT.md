@@ -43,7 +43,11 @@ Run the schema and policy migrations in order using the Supabase SQL Editor:
    - `http://localhost:3000/auth/callback` (for local development)
    - `https://*.vercel.app/auth/callback` (for preview deployments)
    - `https://triptabtally.vercel.app/auth/callback` (for production)
-7. If enabling Google OAuth:
+7. **Custom SMTP (Recommended to eliminate rate limits)**:
+   - Supabase default built-in SMTP enforces a strict limit of 3 emails per hour.
+   - To remove this limit, go to **Project Settings** > **Authentication** > **SMTP Settings**.
+   - Enable Custom SMTP using Resend (`smtp.resend.com`, port 465, username `resend`, password `<your-resend-api-key>`).
+8. If enabling Google OAuth:
    - In Google Cloud Console, create OAuth 2.0 Client credentials with authorized redirect URI: `https://<your-supabase-project-id>.supabase.co/auth/v1/callback`.
    - In Supabase Dashboard, enable Google provider and paste Client ID and Client Secret.
 
