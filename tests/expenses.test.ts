@@ -5,6 +5,8 @@ import {
   validateExpenseDate,
   parseDateInput,
   formatIsoToDisplay,
+  parseAndValidateDate,
+  getSaneTripDateLimits,
 } from '@/lib/schemas/expense';
 import {
   parseRupeesToPaise,
@@ -133,6 +135,85 @@ describe('Manual Date Parsing and Formatting (DD/MM/YYYY)', () => {
     expect(formatIsoToDisplay('2026-12-15')).toBe('15/12/2026');
     expect(formatIsoToDisplay('2026-01-05')).toBe('05/01/2026');
     expect(formatIsoToDisplay('')).toBe('');
+  });
+});
+
+describe('Calendar Reality Checks & Impossible Dates', () => {
+  it('rejects 31-02-4000 with exact error message', () => {
+    const res = parseAndValidateDate('31-02-4000');
+    expect(res.valid).toBe(false);
+    expect(res.error).toBe("Invalid date: this day doesn't exist in the selected month.");
+
+    const resSlash = parseAndValidateDate('31/02/4000');
+    expect(resSlash.valid).toBe(false);
+    expect(resSlash.error).toBe("Invalid date: this day doesn't exist in the selected month.");
+  });
+
+  it('rejects 30-02-2024 and 30-02-2026 with exact error message', () => {
+    const res = parseAndValidateDate('30-02-2024');
+    expect(res.valid).toBe(false);
+    expect(res.error).toBe("Invalid date: this day doesn't exist in the selected month.");
+
+    const resNonLeap = parseAndValidateDate('30/02/2026');
+    expect(resNonLeap.valid).toBe(false);
+    expect(resNonLeap.error).toBe("Invalid date: this day doesn't exist in the selected month.");
+  });
+
+  it('rejects 31-04-2026 because April has 30 days', () => {
+    const res = parseAndValidateDate('31-04-2026');
+    expect(res.valid).toBe(false);
+    expect(res.error).toBe("Invalid date: this day doesn't exist in the selected month.");
+  });
+
+  it('rejects 29-02 in non-leap year but accepts in leap year', () => {
+    const nonLeap = parseAndValidateDate('29-02-2025');
+    expect(nonLeap.valid).toBe(false);
+    expect(nonLeap.error).toBe("Invalid date: this day doesn't exist in the selected month.");
+
+    const leap = parseAndValidateDate('29-02-2024');
+    expect(leap.valid).toBe(true);
+    expect(leap.isoDate).toBe('2024-02-29');
+  });
+
+  it('enforces 4-digit years only', () => {
+    const twoDigit = parseAndValidateDate('15/10/26');
+    expect(twoDigit.valid).toBe(false);
+    expect(twoDigit.error).toBe('Year must be a 4-digit number.');
+
+    const fiveDigit = parseAndValidateDate('15/10/20260');
+    expect(fiveDigit.valid).toBe(false);
+    expect(fiveDigit.error).toBe('Year must be a 4-digit number.');
+  });
+
+  it('rejects invalid months (< 1 or > 12)', () => {
+    const monthZero = parseAndValidateDate('15/00/2026');
+    expect(monthZero.valid).toBe(false);
+    expect(monthZero.error).toBe('Month must be between 01 and 12.');
+
+    const month13 = parseAndValidateDate('15/13/2026');
+    expect(month13.valid).toBe(false);
+    expect(month13.error).toBe('Month must be between 01 and 12.');
+  });
+
+  it('validates expense date with impossible dates and returns exact error', () => {
+    const res = validateExpenseDate('31-02-4000', '2026-01-01', '2027-01-01');
+    expect(res.valid).toBe(false);
+    expect(res.error).toBe("Invalid date: this day doesn't exist in the selected month.");
+  });
+
+  it('enforces sane fallback limits when trip has no start or end dates', () => {
+    const refDate = new Date('2026-10-15');
+    // Limits: min = 2025-10-15, max = 2031-10-15
+    const within = validateExpenseDate('2026-11-01', null, null, refDate);
+    expect(within.valid).toBe(true);
+
+    const tooOld = validateExpenseDate('2024-05-01', null, null, refDate);
+    expect(tooOld.valid).toBe(false);
+    expect(tooOld.error).toContain('between 2025-10-15 and 2031-10-15');
+
+    const tooFuture = validateExpenseDate('2032-01-01', null, null, refDate);
+    expect(tooFuture.valid).toBe(false);
+    expect(tooFuture.error).toContain('between 2025-10-15 and 2031-10-15');
   });
 });
 

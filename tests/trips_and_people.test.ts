@@ -65,6 +65,66 @@ describe('Trip Schema Validation', () => {
     });
     expect(valid.success).toBe(true);
   });
+
+  it('rejects impossible calendar dates in trip start date', () => {
+    const invalidFeb31 = tripSchema.safeParse({
+      name: 'Impossible Trip',
+      startDate: '31-02-4000',
+      displayName: 'Rohan',
+    });
+    expect(invalidFeb31.success).toBe(false);
+    if (!invalidFeb31.success) {
+      expect(invalidFeb31.error.errors[0]?.message).toBe(
+        "Invalid date: this day doesn't exist in the selected month."
+      );
+    }
+
+    const invalidApril31 = tripSchema.safeParse({
+      name: 'Impossible Trip',
+      endDate: '31/04/2026',
+      displayName: 'Rohan',
+    });
+    expect(invalidApril31.success).toBe(false);
+    if (!invalidApril31.success) {
+      expect(invalidApril31.error.errors[0]?.message).toBe(
+        "Invalid date: this day doesn't exist in the selected month."
+      );
+    }
+  });
+
+  it('rejects 2-digit years in trip dates', () => {
+    const invalid = tripSchema.safeParse({
+      name: 'Short Year Trip',
+      startDate: '10/12/26',
+      displayName: 'Rohan',
+    });
+    expect(invalid.success).toBe(false);
+    if (!invalid.success) {
+      expect(invalid.error.errors[0]?.message).toBe('Year must be a 4-digit number.');
+    }
+  });
+
+  it('rejects trip dates outside sane bounds (today - 1 yr to today + 5 yrs)', () => {
+    const wayTooOld = tripSchema.safeParse({
+      name: 'Historical Trip',
+      startDate: '2020-01-01',
+      displayName: 'Rohan',
+    });
+    expect(wayTooOld.success).toBe(false);
+    if (!wayTooOld.success) {
+      expect(wayTooOld.error.errors[0]?.message).toContain('Trip date must be between');
+    }
+
+    const wayTooFuture = tripSchema.safeParse({
+      name: 'Sci-Fi Trip',
+      endDate: '2045-01-01',
+      displayName: 'Rohan',
+    });
+    expect(wayTooFuture.success).toBe(false);
+    if (!wayTooFuture.success) {
+      expect(wayTooFuture.error.errors[0]?.message).toContain('Trip date must be between');
+    }
+  });
 });
 
 describe('Member and Join Schema Validation', () => {

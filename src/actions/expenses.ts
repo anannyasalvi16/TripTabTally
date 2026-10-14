@@ -148,7 +148,7 @@ export async function saveExpenseAction(
     p_amount_paise: amountPaise,
     p_category: category,
     p_paid_by: paidBy,
-    p_spent_on: spentOn,
+    p_spent_on: dateValidation.isoDate || spentOn,
     p_note: note.trim() || null,
     p_split_type: splitType,
     p_split_input: splitInput,

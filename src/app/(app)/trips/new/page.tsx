@@ -3,6 +3,8 @@
 import { useActionState, useState } from 'react';
 import Link from 'next/link';
 import { createTripAction, type TripActionResult } from '@/actions/trips';
+import { DateInput } from '@/components/DateInput';
+import { getSaneTripDateLimits, validateTripDateRange } from '@/lib/schemas/date-utils';
 
 export default function NewTripPage() {
   const [state, formAction, isPending] = useActionState<TripActionResult | null, FormData>(
@@ -11,8 +13,32 @@ export default function NewTripPage() {
   );
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [startDateError, setStartDateError] = useState<string | null>(null);
+  const [endDateError, setEndDateError] = useState<string | null>(null);
+  const [rangeError, setRangeError] = useState<string | null>(null);
 
-  const isInvalidDateRange = Boolean(startDate && endDate && endDate < startDate);
+  const { min: saneMin, max: saneMax } = getSaneTripDateLimits();
+
+  const isInvalidDateRange = Boolean(
+    (startDate && endDate && endDate < startDate) ||
+    startDateError ||
+    endDateError ||
+    rangeError
+  );
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    if (startDateError || endDateError) {
+      e.preventDefault();
+      return;
+    }
+    const rangeCheck = validateTripDateRange(startDate, endDate);
+    if (!rangeCheck.valid) {
+      e.preventDefault();
+      setRangeError(rangeCheck.error || 'Invalid date range.');
+      return;
+    }
+    setRangeError(null);
+  }
 
   return (
     <div className="px-4 py-8 sm:px-8 max-w-form mx-auto">
@@ -37,7 +63,7 @@ export default function NewTripPage() {
         </div>
       )}
 
-      <form action={formAction} className="space-y-5">
+      <form action={formAction} onSubmit={handleSubmit} className="space-y-5">
         <div>
           <label htmlFor="name" className="block text-xs font-medium text-ink mb-1">
             Trip name <span className="text-brick">*</span>
@@ -74,49 +100,37 @@ export default function NewTripPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="startDate" className="block text-xs font-medium text-ink-2 mb-1">
-              Start date (optional)
-            </label>
-            <input
-              id="startDate"
-              name="startDate"
-              type="date"
-              value={startDate}
-              max={endDate || undefined}
-              onChange={(e) => {
-                const val = e.target.value;
-                setStartDate(val);
-                if (endDate && val && endDate < val) {
-                  setEndDate(val);
-                }
-              }}
-              className="w-full border border-rule bg-paper-2 px-3 py-2 text-sm text-ink focus:border-brick"
-            />
-            {state?.fieldErrors?.startDate && (
-              <p className="mt-1 text-xs text-brick">{state.fieldErrors.startDate}</p>
-            )}
-          </div>
+          <DateInput
+            id="startDate"
+            name="startDate"
+            label="Start date (optional)"
+            value={startDate}
+            min={saneMin}
+            max={endDate || saneMax}
+            error={state?.fieldErrors?.startDate || startDateError}
+            onChange={(iso) => {
+              setStartDate(iso);
+              setStartDateError(null);
+              setRangeError(null);
+            }}
+            onError={(err) => setStartDateError(err)}
+          />
 
-          <div>
-            <label htmlFor="endDate" className="block text-xs font-medium text-ink-2 mb-1">
-              End date (optional)
-            </label>
-            <input
-              id="endDate"
-              name="endDate"
-              type="date"
-              value={endDate}
-              min={startDate || undefined}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full border border-rule bg-paper-2 px-3 py-2 text-sm text-ink focus:border-brick"
-            />
-            {(state?.fieldErrors?.endDate || isInvalidDateRange) && (
-              <p className="mt-1 text-xs text-brick">
-                {state?.fieldErrors?.endDate || 'End date cannot be earlier than start date.'}
-              </p>
-            )}
-          </div>
+          <DateInput
+            id="endDate"
+            name="endDate"
+            label="End date (optional)"
+            value={endDate}
+            min={startDate || saneMin}
+            max={saneMax}
+            error={state?.fieldErrors?.endDate || endDateError || (startDate && endDate && endDate < startDate ? 'End date cannot be earlier than start date.' : rangeError)}
+            onChange={(iso) => {
+              setEndDate(iso);
+              setEndDateError(null);
+              setRangeError(null);
+            }}
+            onError={(err) => setEndDateError(err)}
+          />
         </div>
 
         <div>

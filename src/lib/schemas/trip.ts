@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { validateTripDate, parseDateInput } from './date-utils';
 
 export const tripSchema = z
   .object({
@@ -13,8 +14,34 @@ export const tripSchema = z
       .max(80, 'Destination cannot exceed 80 characters.')
       .optional()
       .or(z.literal('')),
-    startDate: z.string().optional().or(z.literal('')),
-    endDate: z.string().optional().or(z.literal('')),
+    startDate: z
+      .string()
+      .optional()
+      .or(z.literal(''))
+      .superRefine((val, ctx) => {
+        if (!val || !val.trim()) return;
+        const res = validateTripDate(val);
+        if (!res.valid) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: res.error || 'Invalid start date.',
+          });
+        }
+      }),
+    endDate: z
+      .string()
+      .optional()
+      .or(z.literal(''))
+      .superRefine((val, ctx) => {
+        if (!val || !val.trim()) return;
+        const res = validateTripDate(val);
+        if (!res.valid) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: res.error || 'Invalid end date.',
+          });
+        }
+      }),
     budgetRupees: z
       .string()
       .trim()
@@ -37,7 +64,11 @@ export const tripSchema = z
   .refine(
     (data) => {
       if (data.startDate && data.endDate) {
-        return new Date(data.endDate) >= new Date(data.startDate);
+        const s = parseDateInput(data.startDate);
+        const e = parseDateInput(data.endDate);
+        if (s && e) {
+          return e >= s;
+        }
       }
       return true;
     },

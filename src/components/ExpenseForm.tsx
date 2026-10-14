@@ -20,6 +20,7 @@ import {
   type SplitType,
 } from '@/lib/schemas/expense';
 import { MoneyInput } from './MoneyInput';
+import { DateInput } from './DateInput';
 
 interface Member {
   id: string;
@@ -80,10 +81,7 @@ export function ExpenseForm({
 
   const initialIso = getDefaultSpentOn();
   const [spentOn, setSpentOn] = useState(initialIso);
-  const [displayDate, setDisplayDate] = useState(() => formatIsoToDisplay(initialIso));
   const [dateError, setDateError] = useState<string | null>(null);
-  const calendarPickerRef = useRef<HTMLInputElement>(null);
-  const hiddenInputRef = useRef<HTMLInputElement>(null);
   const [note, setNote] = useState(initialData?.note || '');
   const [splitType, setSplitType] = useState<SplitType>(initialData?.splitType || 'equal');
 
@@ -195,21 +193,15 @@ export function ExpenseForm({
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    const parsed = parseDateInput(displayDate);
-    if (!parsed) {
+    if (dateError) {
       e.preventDefault();
-      setDateError('Please enter a valid date in DD/MM/YYYY format.');
       return;
     }
-    const res = validateExpenseDate(parsed, startDate, endDate);
+    const res = validateExpenseDate(spentOn, startDate, endDate);
     if (!res.valid) {
       e.preventDefault();
       setDateError(res.error || 'Invalid date.');
       return;
-    }
-    setSpentOn(parsed);
-    if (hiddenInputRef.current) {
-      hiddenInputRef.current.value = parsed;
     }
     setDateError(null);
   }
@@ -307,146 +299,23 @@ export function ExpenseForm({
           </select>
         </div>
 
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label htmlFor="displayDate" className="block text-xs font-medium text-ink">
-              Date <span className="text-brick">*</span>
-            </label>
-            <span className="text-[11px] font-mono text-ink-2">DD/MM/YYYY</span>
-          </div>
-
-          <div
-            className={`relative flex items-stretch border bg-[#FCFAF5] dark:bg-[#28241C] transition-colors focus-within:border-brick ${
-              dateError || state?.fieldErrors?.spentOn
-                ? 'border-brick'
-                : 'border-rule hover:border-ink'
-            }`}
-          >
-            {/* Hidden field submitting normalized ISO YYYY-MM-DD */}
-            <input
-              ref={hiddenInputRef}
-              type="hidden"
-              name="spentOn"
-              value={spentOn}
-            />
-
-            {/* Visible text input allowing typing DD/MM/YYYY manually */}
-            <input
-              id="displayDate"
-              name="spentOnDisplay"
-              type="text"
-              required
-              inputMode="numeric"
-              placeholder="DD/MM/YYYY"
-              value={displayDate}
-              onChange={(e) => {
-                const val = e.target.value;
-                setDisplayDate(val);
-                setDateError(null);
-                const parsed = parseDateInput(val);
-                if (parsed) {
-                  setSpentOn(parsed);
-                  if (hiddenInputRef.current) {
-                    hiddenInputRef.current.value = parsed;
-                  }
-                }
-              }}
-              onBlur={() => {
-                if (!displayDate.trim()) {
-                  setDateError('Please enter a valid date in DD/MM/YYYY format.');
-                  return;
-                }
-                const parsed = parseDateInput(displayDate);
-                if (parsed) {
-                  setSpentOn(parsed);
-                  setDisplayDate(formatIsoToDisplay(parsed));
-                  if (hiddenInputRef.current) {
-                    hiddenInputRef.current.value = parsed;
-                  }
-                  const res = validateExpenseDate(parsed, startDate, endDate);
-                  if (!res.valid) {
-                    setDateError(res.error || 'Invalid date.');
-                  } else {
-                    setDateError(null);
-                  }
-                } else {
-                  setDateError('Please enter a valid date in DD/MM/YYYY format.');
-                }
-              }}
-              aria-invalid={!!(dateError || state?.fieldErrors?.spentOn)}
-              aria-describedby={
-                dateError || state?.fieldErrors?.spentOn ? 'spentOn-error' : undefined
-              }
-              className="w-full bg-transparent px-3 py-2 text-sm text-ink font-mono placeholder:text-ink-2/60 focus:outline-none"
-            />
-
-            {/* Clearly visible calendar icon button with high contrast */}
-            <div
-              className="relative flex items-center justify-center px-3 border-l border-rule/80 dark:border-rule/80 bg-paper-2 dark:bg-[#332E23] hover:bg-paper dark:hover:bg-[#3E382B] transition-colors cursor-pointer group"
-              title="Open calendar picker"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="square"
-                strokeLinejoin="miter"
-                className="w-4 h-4 text-ink dark:text-ink group-hover:text-brick dark:group-hover:text-brick transition-colors select-none pointer-events-none"
-                aria-hidden="true"
-              >
-                <rect x="3" y="4" width="18" height="18" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-                <rect x="7" y="13" width="2" height="2" fill="currentColor" />
-                <rect x="11" y="13" width="2" height="2" fill="currentColor" />
-                <rect x="15" y="13" width="2" height="2" fill="currentColor" />
-                <rect x="7" y="17" width="2" height="2" fill="currentColor" />
-                <rect x="11" y="17" width="2" height="2" fill="currentColor" />
-                <rect x="15" y="17" width="2" height="2" fill="currentColor" />
-              </svg>
-
-              {/* Native date picker covering the calendar icon */}
-              <input
-                ref={calendarPickerRef}
-                type="date"
-                min={startDate || undefined}
-                max={endDate || undefined}
-                value={spentOn || ''}
-                tabIndex={-1}
-                title="Choose date from calendar"
-                aria-label="Choose date from calendar"
-                onChange={(e) => {
-                  const newIso = e.target.value;
-                  if (newIso) {
-                    setSpentOn(newIso);
-                    setDisplayDate(formatIsoToDisplay(newIso));
-                    if (hiddenInputRef.current) {
-                      hiddenInputRef.current.value = newIso;
-                    }
-                    const res = validateExpenseDate(newIso, startDate, endDate);
-                    if (!res.valid) {
-                      setDateError(res.error || 'Invalid date.');
-                    } else {
-                      setDateError(null);
-                    }
-                  }
-                }}
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-              />
-            </div>
-          </div>
-
-          {(dateError || state?.fieldErrors?.spentOn) && (
-            <p id="spentOn-error" role="alert" className="mt-1 text-xs text-brick font-medium">
-              {dateError || state?.fieldErrors?.spentOn}
-            </p>
-          )}
-        </div>
+        <DateInput
+          id="spentOn"
+          name="spentOn"
+          label="Date"
+          required
+          value={spentOn}
+          min={startDate || undefined}
+          max={endDate || undefined}
+          error={dateError || state?.fieldErrors?.spentOn}
+          onChange={(iso) => {
+            setSpentOn(iso);
+            setDateError(null);
+          }}
+          onError={(err) => {
+            setDateError(err);
+          }}
+        />
       </div>
 
       {/* Note */}

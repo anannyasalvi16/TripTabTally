@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import crypto from 'node:crypto';
 import { createClient } from '@/lib/supabase/server';
 import { tripSchema, type TripInput } from '@/lib/schemas/trip';
+import { parseDateInput } from '@/lib/schemas/date-utils';
 
 export type TripActionResult = {
   ok: boolean;
@@ -17,11 +18,16 @@ export async function createTripAction(
   prevState: TripActionResult | null,
   formData: FormData
 ): Promise<TripActionResult> {
+  const rawStartDate = String(formData.get('startDate') || '');
+  const rawStartDateDisplay = String(formData.get('startDateDisplay') || '');
+  const rawEndDate = String(formData.get('endDate') || '');
+  const rawEndDateDisplay = String(formData.get('endDateDisplay') || '');
+
   const rawData: Record<string, string> = {
     name: String(formData.get('name') || ''),
     destination: String(formData.get('destination') || ''),
-    startDate: String(formData.get('startDate') || ''),
-    endDate: String(formData.get('endDate') || ''),
+    startDate: rawStartDate || rawStartDateDisplay,
+    endDate: rawEndDate || rawEndDateDisplay,
     budgetRupees: String(formData.get('budgetRupees') || ''),
     displayName: String(formData.get('displayName') || ''),
   };
@@ -57,12 +63,15 @@ export async function createTripAction(
     return { ok: false, message: 'You must be signed in to create a trip.' };
   }
 
+  const normalizedStartDate = startDate ? (parseDateInput(startDate) || startDate) : null;
+  const normalizedEndDate = endDate ? (parseDateInput(endDate) || endDate) : null;
+
   // Call the atomic create_trip RPC
   const { data: tripId, error } = await supabase.rpc('create_trip', {
     p_name: name,
     p_destination: destination || null,
-    p_start_date: startDate || null,
-    p_end_date: endDate || null,
+    p_start_date: normalizedStartDate,
+    p_end_date: normalizedEndDate,
     p_currency: 'INR',
     p_budget_paise: budgetPaise,
     p_display_name: displayName,
