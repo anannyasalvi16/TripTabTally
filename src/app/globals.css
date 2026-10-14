@@ -24,6 +24,11 @@
     --color-brick-dark: #B95336;
     --color-moss: #7DB08B;
   }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.9) brightness(1.2);
+    cursor: pointer;
+  }
 }
 
 html,

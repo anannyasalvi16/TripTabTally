@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { expenseSchema, expenseCategories } from '@/lib/schemas/expense';
+import {
+  expenseSchema,
+  expenseCategories,
+  validateExpenseDate,
+  parseDateInput,
+  formatIsoToDisplay,
+} from '@/lib/schemas/expense';
 import {
   parseRupeesToPaise,
   splitEqual,
@@ -8,6 +14,127 @@ import {
   splitShares,
   computeBalances,
 } from '@/lib/money';
+
+describe('Trip Date Range Restriction on Expenses', () => {
+  const tripStartDate = '2026-12-10';
+  const tripEndDate = '2026-12-15';
+
+  it('accepts dates within the trip start and end range', () => {
+    const res = validateExpenseDate('2026-12-12', tripStartDate, tripEndDate);
+    expect(res.valid).toBe(true);
+    expect(res.error).toBeUndefined();
+  });
+
+  it('accepts dates exactly on the trip start date', () => {
+    const res = validateExpenseDate('2026-12-10', tripStartDate, tripEndDate);
+    expect(res.valid).toBe(true);
+  });
+
+  it('accepts dates exactly on the trip end date', () => {
+    const res = validateExpenseDate('2026-12-15', tripStartDate, tripEndDate);
+    expect(res.valid).toBe(true);
+  });
+
+  it('rejects dates before the trip start date with error message', () => {
+    const res = validateExpenseDate('2026-12-09', tripStartDate, tripEndDate);
+    expect(res.valid).toBe(false);
+    expect(res.error).toBe('Expense date must be between 2026-12-10 and 2026-12-15.');
+  });
+
+  it('rejects dates after the trip end date with error message', () => {
+    const res = validateExpenseDate('2026-12-16', tripStartDate, tripEndDate);
+    expect(res.valid).toBe(false);
+    expect(res.error).toBe('Expense date must be between 2026-12-10 and 2026-12-15.');
+  });
+
+  it('handles trip with only a start date', () => {
+    const valid = validateExpenseDate('2026-12-10', tripStartDate, null);
+    expect(valid.valid).toBe(true);
+
+    const invalid = validateExpenseDate('2026-12-08', tripStartDate, null);
+    expect(invalid.valid).toBe(false);
+    expect(invalid.error).toBe('Expense date must be on or after 2026-12-10.');
+  });
+
+  it('handles trip with only an end date', () => {
+    const valid = validateExpenseDate('2026-12-14', null, tripEndDate);
+    expect(valid.valid).toBe(true);
+
+    const invalid = validateExpenseDate('2026-12-18', null, tripEndDate);
+    expect(invalid.valid).toBe(false);
+    expect(invalid.error).toBe('Expense date must be on or before 2026-12-15.');
+  });
+
+  it('handles single-day trip where start and end date are equal', () => {
+    const valid = validateExpenseDate('2026-12-10', '2026-12-10', '2026-12-10');
+    expect(valid.valid).toBe(true);
+
+    const invalid = validateExpenseDate('2026-12-11', '2026-12-10', '2026-12-10');
+    expect(invalid.valid).toBe(false);
+    expect(invalid.error).toBe('Expense date must be 2026-12-10.');
+  });
+
+  it('allows any valid date when trip has no date restrictions', () => {
+    const res = validateExpenseDate('2026-12-25', null, null);
+    expect(res.valid).toBe(true);
+  });
+
+  it('rejects empty or malformed date strings', () => {
+    const empty = validateExpenseDate('', tripStartDate, tripEndDate);
+    expect(empty.valid).toBe(false);
+    expect(empty.error).toBe('Please enter a valid date.');
+
+    const malformed = validateExpenseDate('invalid-date', tripStartDate, tripEndDate);
+    expect(malformed.valid).toBe(false);
+    expect(malformed.error).toBe('Please enter a valid date.');
+  });
+
+  it('accepts DD/MM/YYYY formatted dates within range', () => {
+    const valid = validateExpenseDate('12/12/2026', tripStartDate, tripEndDate);
+    expect(valid.valid).toBe(true);
+  });
+
+  it('rejects DD/MM/YYYY formatted dates outside range', () => {
+    const invalid = validateExpenseDate('05/12/2026', tripStartDate, tripEndDate);
+    expect(invalid.valid).toBe(false);
+    expect(invalid.error).toBe('Expense date must be between 2026-12-10 and 2026-12-15.');
+  });
+});
+
+describe('Manual Date Parsing and Formatting (DD/MM/YYYY)', () => {
+  it('parses valid DD/MM/YYYY strings to ISO YYYY-MM-DD', () => {
+    expect(parseDateInput('15/12/2026')).toBe('2026-12-15');
+    expect(parseDateInput('01/01/2026')).toBe('2026-01-01');
+    expect(parseDateInput('1/5/2026')).toBe('2026-05-01');
+  });
+
+  it('parses valid DD-MM-YYYY and DD.MM.YYYY strings', () => {
+    expect(parseDateInput('15-12-2026')).toBe('2026-12-15');
+    expect(parseDateInput('15.12.2026')).toBe('2026-12-15');
+  });
+
+  it('preserves valid YYYY-MM-DD format', () => {
+    expect(parseDateInput('2026-12-15')).toBe('2026-12-15');
+  });
+
+  it('rejects invalid day or month', () => {
+    expect(parseDateInput('32/12/2026')).toBeNull();
+    expect(parseDateInput('15/13/2026')).toBeNull();
+    expect(parseDateInput('0/05/2026')).toBeNull();
+  });
+
+  it('rejects nonexistent dates for specific months and non-leap years', () => {
+    expect(parseDateInput('31/04/2026')).toBeNull(); // April has 30 days
+    expect(parseDateInput('29/02/2026')).toBeNull(); // 2026 is not leap year
+    expect(parseDateInput('29/02/2024')).toBe('2024-02-29'); // 2024 is leap year
+  });
+
+  it('formats ISO dates to DD/MM/YYYY for display', () => {
+    expect(formatIsoToDisplay('2026-12-15')).toBe('15/12/2026');
+    expect(formatIsoToDisplay('2026-01-05')).toBe('05/01/2026');
+    expect(formatIsoToDisplay('')).toBe('');
+  });
+});
 
 describe('Expense Schema Validation', () => {
   it('validates a complete and correct expense payload', () => {

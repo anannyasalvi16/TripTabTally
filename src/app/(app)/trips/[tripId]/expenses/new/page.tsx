@@ -32,6 +32,13 @@ export default async function NewExpensePage({ params }: NewExpensePageProps) {
 
   const currentMember = memberRows.find((m) => m.user_id === user?.id);
 
+  // Load trip details
+  const { data: trip } = await supabase
+    .from('trips')
+    .select('start_date, end_date')
+    .eq('id', tripId)
+    .single();
+
   return (
     <div className="max-w-form mx-auto py-6">
       <div className="border-b border-rule pb-3 mb-6">
@@ -54,6 +61,8 @@ export default async function NewExpensePage({ params }: NewExpensePageProps) {
           tripId={tripId}
           members={members}
           currentMemberId={currentMember?.id}
+          startDate={trip?.start_date}
+          endDate={trip?.end_date}
         />
       </div>
     </div>

@@ -41,6 +41,8 @@ interface TripMainViewProps {
   tripId: string;
   totalBudgetPaise: number | null;
   allTotalSpentPaise?: number;
+  startDate?: string | null;
+  endDate?: string | null;
   members: Member[];
   expenses: ExpenseItem[];
   balances: MemberBalance[];
@@ -52,6 +54,8 @@ export function TripMainView({
   tripId,
   totalBudgetPaise,
   allTotalSpentPaise,
+  startDate,
+  endDate,
   members,
   expenses,
   balances,
@@ -171,9 +175,12 @@ export function TripMainView({
               </div>
 
               <ExpenseForm
+                key={editingExpense ? editingExpense.id : 'new-expense'}
                 tripId={tripId}
                 members={members}
                 currentMemberId={currentMemberId}
+                startDate={startDate}
+                endDate={endDate}
                 initialData={
                   editingExpense
                     ? {

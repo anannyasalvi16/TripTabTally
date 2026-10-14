@@ -23,7 +23,7 @@ export default async function TripOverviewPage({ params, searchParams }: TripPag
   // Load trip details
   const { data: trip } = await supabase
     .from('trips')
-    .select('name, budget_paise')
+    .select('name, budget_paise, start_date, end_date')
     .eq('id', tripId)
     .single();
 
@@ -146,6 +146,8 @@ export default async function TripOverviewPage({ params, searchParams }: TripPag
       tripId={tripId}
       totalBudgetPaise={trip?.budget_paise || null}
       allTotalSpentPaise={allTotalSpentPaise}
+      startDate={trip?.start_date}
+      endDate={trip?.end_date}
       members={members}
       expenses={expenses}
       balances={balances}

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { parseRupeesToPaise, formatPaise, splitEqual, splitExact, splitPercent, splitShares } from '@/lib/money';
-import { expenseSchema, type SplitType, type ExpenseCategory } from '@/lib/schemas/expense';
+import { expenseSchema, validateExpenseDate, parseDateInput, type SplitType, type ExpenseCategory } from '@/lib/schemas/expense';
 
 export type ExpenseActionResult = {
   ok: boolean;
@@ -24,7 +24,11 @@ export async function saveExpenseAction(
   const amountRupees = String(formData.get('amountRupees') || '');
   const category = String(formData.get('category') || '') as ExpenseCategory;
   const paidBy = String(formData.get('paidBy') || '');
-  const spentOn = String(formData.get('spentOn') || '');
+  const rawSpentOn = String(formData.get('spentOn') || '');
+  const rawSpentOnDisplay = String(formData.get('spentOnDisplay') || '');
+  const spentOn = parseDateInput(rawSpentOn) || parseDateInput(rawSpentOnDisplay) || rawSpentOn || rawSpentOnDisplay;
+  const formTripStartDate = String(formData.get('tripStartDate') || '') || undefined;
+  const formTripEndDate = String(formData.get('tripEndDate') || '') || undefined;
   const note = String(formData.get('note') || '');
   const splitType = String(formData.get('splitType') || 'equal') as SplitType;
   const rawSplitInput = String(formData.get('splitInput') || '{}');
@@ -54,6 +58,32 @@ export async function saveExpenseAction(
       ok: false,
       fieldErrors: { amountRupees: 'Amount must be greater than zero.' },
       message: 'Amount must be greater than zero.',
+    };
+  }
+
+  const supabase = await createClient();
+
+  // Validate expense date against trip start and end date
+  let effectiveStartDate = formTripStartDate;
+  let effectiveEndDate = formTripEndDate;
+
+  const { data: tripData } = await supabase
+    .from('trips')
+    .select('start_date, end_date')
+    .eq('id', tripId)
+    .single();
+
+  if (tripData) {
+    effectiveStartDate = tripData.start_date ?? undefined;
+    effectiveEndDate = tripData.end_date ?? undefined;
+  }
+
+  const dateValidation = validateExpenseDate(spentOn, effectiveStartDate, effectiveEndDate);
+  if (!dateValidation.valid) {
+    return {
+      ok: false,
+      fieldErrors: { spentOn: dateValidation.error || 'Invalid date.' },
+      message: dateValidation.error || 'Invalid date.',
     };
   }
 
@@ -109,8 +139,6 @@ export async function saveExpenseAction(
   if (splitsPayload.length === 0) {
     return { ok: false, message: 'At least one member must be included in the split.' };
   }
-
-  const supabase = await createClient();
 
   // Call atomic save_expense database function
   const { data: rpcData, error } = await supabase.rpc('save_expense', {
