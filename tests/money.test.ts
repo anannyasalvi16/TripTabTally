@@ -6,7 +6,9 @@ import {
   splitExact,
   splitPercent,
   splitShares,
+  splitFamily,
   computeBalances,
+  computeFamilyBalances,
   planSettlement,
   applySettlementPlan,
   verifyZeroSum,
@@ -199,9 +201,173 @@ describe('Shares Split (splitShares)', () => {
     }
   });
 
+  it('supports decimal weights (e.g. adult = 1, kid = 0.5)', () => {
+    const totalPaise = 15000; // 15000 across 1 + 0.5 = 1.5 => adult gets 10000, kid gets 5000
+    const res = splitShares(totalPaise, {
+      adult: 1,
+      kid: 0.5,
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.data.adult).toBe(10000);
+      expect(res.data.kid).toBe(5000);
+      expect(res.data.adult + res.data.kid).toBe(totalPaise);
+    }
+  });
+
+  it('handles awkward decimal weights and uneven division summing exactly to total paise', () => {
+    const totalPaise = 10001; // odd amount
+    const res = splitShares(totalPaise, {
+      adult1: 1,
+      adult2: 1,
+      kid1: 0.5,
+      kid2: 0.5,
+    }); // total weight = 3
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const sum = Object.values(res.data).reduce((a, b) => a + b, 0);
+      expect(sum).toBe(totalPaise);
+    }
+  });
+
   it('rejects zero or negative share counts', () => {
     const res = splitShares(10000, { m1: 0, m2: 2 });
     expect(res.ok).toBe(false);
+
+    const negative = splitShares(10000, { m1: -1, m2: 2 });
+    expect(negative.ok).toBe(false);
+  });
+});
+
+describe('Family Split (splitFamily)', () => {
+  const members = [
+    { id: 'sharma_dad', familyId: 'fam_sharma', displayName: 'Anil' },
+    { id: 'sharma_mom', familyId: 'fam_sharma', displayName: 'Pooja' },
+    { id: 'gupta_dad', familyId: 'fam_gupta', displayName: 'Ramesh' },
+    { id: 'gupta_son', familyId: 'fam_gupta', displayName: 'Aarav' },
+    { id: 'solo_charlie', familyId: null, displayName: 'Charlie' },
+  ];
+
+  it('splits equally among 2 families and 1 solo member (3 equal shares)', () => {
+    const totalPaise = 30000; // ₹300 => 3 units get ₹100 each (10000 paise)
+    const participating = ['sharma_dad', 'sharma_mom', 'gupta_dad', 'gupta_son', 'solo_charlie'];
+    const res = splitFamily(totalPaise, members, participating, 'seed-family-1');
+
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      // 1. Total sum must equal exactly 30000 paise
+      const totalSum = Object.values(res.data.memberShares).reduce((a, b) => a + b, 0);
+      expect(totalSum).toBe(30000);
+
+      // 2. Solo Charlie gets full 1 unit (10000)
+      expect(res.data.memberShares.solo_charlie).toBe(10000);
+
+      // 3. Sharma family gets 10000 split across 2 members (5000 each)
+      expect(res.data.memberShares.sharma_dad).toBe(5000);
+      expect(res.data.memberShares.sharma_mom).toBe(5000);
+
+      // 4. Gupta family gets 10000 split across 2 members (5000 each)
+      expect(res.data.memberShares.gupta_dad).toBe(5000);
+      expect(res.data.memberShares.gupta_son).toBe(5000);
+
+      // 5. Family summaries
+      expect(res.data.familyShares['fam_sharma']).toBe(10000);
+      expect(res.data.familyShares['fam_gupta']).toBe(10000);
+      expect(res.data.familyShares['solo:solo_charlie']).toBe(10000);
+    }
+  });
+
+  it('guarantees exact sum even with indivisible amounts (Largest Remainder Method)', () => {
+    const totalPaise = 10001; // ₹100.01 among 3 units
+    const participating = ['sharma_dad', 'sharma_mom', 'gupta_dad', 'solo_charlie'];
+    const res = splitFamily(totalPaise, members, participating, 'seed-family-2');
+
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const totalSum = Object.values(res.data.memberShares).reduce((a, b) => a + b, 0);
+      expect(totalSum).toBe(totalPaise);
+    }
+  });
+
+  it('handles expense when only 1 member of a family participates', () => {
+    const totalPaise = 12000;
+    // Only sharma_dad from Sharma family, and solo_charlie
+    const participating = ['sharma_dad', 'solo_charlie'];
+    const res = splitFamily(totalPaise, members, participating, 'seed-family-3');
+
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.data.memberShares.sharma_dad).toBe(6000);
+      expect(res.data.memberShares.solo_charlie).toBe(6000);
+      expect(res.data.memberShares.sharma_mom ?? 0).toBe(0);
+      expect(res.data.memberShares.gupta_dad ?? 0).toBe(0);
+    }
+  });
+
+  it('rejects split when no members participate', () => {
+    const res = splitFamily(10000, members, [], 'seed-empty');
+    expect(res.ok).toBe(false);
+  });
+});
+
+describe('Family Balances and Settlement (computeFamilyBalances)', () => {
+  const members = [
+    { id: 'm1', familyId: 'f1', displayName: 'Alice' },
+    { id: 'm2', familyId: 'f1', displayName: 'Bob' },
+    { id: 'm3', familyId: 'f2', displayName: 'Charlie' },
+    { id: 'm4', familyId: null, displayName: 'Dave (Solo)' },
+  ];
+
+  const families = [
+    { id: 'f1', name: 'Sharma family' },
+    { id: 'f2', name: 'Gupta family' },
+  ];
+
+  it('aggregates individual member balances into family and solo balances', () => {
+    const individualBalances = {
+      m1: 3000,  // Alice (+30)
+      m2: -1000, // Bob (-10) => Sharma family net = +20 (2000)
+      m3: -1500, // Charlie (-15) => Gupta family net = -15 (-1500)
+      m4: -500,  // Dave (-5) => Dave net = -5 (-500)
+    };
+
+    const familyBalances = computeFamilyBalances(individualBalances, members, families);
+
+    const sharma = familyBalances.find((f) => f.id === 'f1');
+    const gupta = familyBalances.find((f) => f.id === 'f2');
+    const dave = familyBalances.find((f) => f.id === 'm4');
+
+    expect(sharma?.balancePaise).toBe(2000);
+    expect(gupta?.balancePaise).toBe(-1500);
+    expect(dave?.balancePaise).toBe(-500);
+
+    // Sum of family balances must equal 0
+    const totalFamilyBalance = familyBalances.reduce((acc, f) => acc + f.balancePaise, 0);
+    expect(totalFamilyBalance).toBe(0);
+  });
+
+  it('allows planSettlement on family balances to simplify debts between family units', () => {
+    const individualBalances = {
+      m1: 3000,
+      m2: -1000, // f1 net = +2000
+      m3: -1500, // f2 net = -1500
+      m4: -500,  // m4 net = -500
+    };
+
+    const familyBalances = computeFamilyBalances(individualBalances, members, families);
+    const balanceMap: Record<string, number> = {};
+    for (const fb of familyBalances) {
+      balanceMap[fb.id] = fb.balancePaise;
+    }
+
+    const plan = planSettlement(balanceMap);
+    // f2 owes 1500 to f1, m4 owes 500 to f1 (total 2 transfers)
+    expect(plan.length).toBe(2);
+
+    const after = applySettlementPlan(balanceMap, plan);
+    for (const val of Object.values(after)) {
+      expect(val).toBe(0);
+    }
   });
 });
 

@@ -9,6 +9,7 @@ import {
   splitExact,
   splitPercent,
   splitShares,
+  splitFamily,
 } from '@/lib/money';
 import { saveExpenseAction, type ExpenseActionResult } from '@/actions/expenses';
 import {
@@ -22,14 +23,22 @@ import {
 import { MoneyInput } from './MoneyInput';
 import { DateInput } from './DateInput';
 
-interface Member {
+export interface Member {
   id: string;
   display_name: string;
+  family_id?: string | null;
+  family_name?: string | null;
+}
+
+export interface Family {
+  id: string;
+  name: string;
 }
 
 interface ExpenseFormProps {
   tripId: string;
   members: Member[];
+  families?: Family[];
   currentMemberId?: string;
   startDate?: string | null;
   endDate?: string | null;
@@ -53,6 +62,7 @@ interface ExpenseFormProps {
 export function ExpenseForm({
   tripId,
   members,
+  families = [],
   currentMemberId,
   startDate: propStartDate,
   endDate: propEndDate,
@@ -127,6 +137,7 @@ export function ExpenseForm({
 
   let livePreview: {
     shares: Record<string, number>;
+    familyShares?: Record<string, number>;
     error?: string;
     isValid: boolean;
   } = { shares: {}, isValid: false };
@@ -138,6 +149,22 @@ export function ExpenseForm({
       } else {
         const res = splitEqual(totalPaise, selectedMemberIds, title);
         livePreview = { shares: res, isValid: true };
+      }
+    } else if (splitType === 'family') {
+      if (selectedMemberIds.length === 0) {
+        livePreview = { shares: {}, error: 'Select at least one member or family.', isValid: false };
+      } else {
+        const memberInputs = members.map((m) => ({ id: m.id, familyId: m.family_id }));
+        const res = splitFamily(totalPaise, memberInputs, selectedMemberIds, title);
+        if (res.ok) {
+          livePreview = {
+            shares: res.data.memberShares,
+            familyShares: res.data.familyShares,
+            isValid: true,
+          };
+        } else {
+          livePreview = { shares: {}, error: res.error, isValid: false };
+        }
       }
     } else if (splitType === 'exact') {
       const paiseMap: Record<string, number> = {};
@@ -165,7 +192,7 @@ export function ExpenseForm({
     } else if (splitType === 'shares') {
       const shMap: Record<string, number> = {};
       for (const m of members) {
-        shMap[m.id] = parseInt(shares[m.id] || '1', 10);
+        shMap[m.id] = parseFloat(shares[m.id] || '1');
       }
       const res = splitShares(totalPaise, shMap);
       if (res.ok) {
@@ -179,6 +206,8 @@ export function ExpenseForm({
   // Construct splitInput JSON
   const splitInputPayload =
     splitType === 'equal'
+      ? { memberIds: selectedMemberIds }
+      : splitType === 'family'
       ? { memberIds: selectedMemberIds }
       : splitType === 'exact'
       ? { amounts: exactAmounts }
@@ -340,19 +369,25 @@ export function ExpenseForm({
         <span className="text-xs font-mono text-ink-2 uppercase tracking-wider block mb-2">
           Split method
         </span>
-        <div className="flex border-b border-rule mb-4 text-xs font-medium">
-          {(['equal', 'exact', 'percent', 'shares'] as const).map((type) => (
+        <div className="flex flex-wrap border-b border-rule mb-4 text-xs font-medium gap-1">
+          {[
+            { id: 'equal', label: 'Equally per person' },
+            { id: 'family', label: 'Equally per family' },
+            { id: 'shares', label: 'Weighted shares' },
+            { id: 'exact', label: 'Custom amounts' },
+            { id: 'percent', label: 'Percentage' },
+          ].map(({ id, label }) => (
             <button
-              key={type}
+              key={id}
               type="button"
-              onClick={() => setSplitType(type)}
-              className={`pb-2 px-3 capitalize border-b-2 transition-colors ${
-                splitType === type
+              onClick={() => setSplitType(id as SplitType)}
+              className={`pb-2 px-3 border-b-2 transition-colors ${
+                splitType === id
                   ? 'border-brick text-brick'
                   : 'border-transparent text-ink-2 hover:text-ink'
               }`}
             >
-              {type}
+              {label}
             </button>
           ))}
         </div>
@@ -386,7 +421,99 @@ export function ExpenseForm({
           </div>
         )}
 
-        {/* Tab 2: Exact Split */}
+        {/* Tab 2: Family Split */}
+        {splitType === 'family' && (
+          <div className="space-y-4">
+            <p className="text-xs text-ink-2">
+              Each participating family (and solo member) pays 1 share, divided equally among its members.
+            </p>
+
+            {/* Families */}
+            {families.map((fam) => {
+              const famMembers = members.filter((m) => m.family_id === fam.id);
+              if (famMembers.length === 0) return null;
+              const allFamSelected = famMembers.every((m) => selectedMemberIds.includes(m.id));
+              const someFamSelected = famMembers.some((m) => selectedMemberIds.includes(m.id));
+
+              return (
+                <div key={fam.id} className="border border-rule p-3 bg-paper-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-xs text-ink">{fam.name} ({famMembers.length} members)</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (allFamSelected) {
+                          // Deselect all members of this family
+                          setSelectedMemberIds((prev) => prev.filter((id) => !famMembers.some((fm) => fm.id === id)));
+                        } else {
+                          // Select all members of this family
+                          const idsToAdd = famMembers.map((m) => m.id);
+                          setSelectedMemberIds((prev) => Array.from(new Set([...prev, ...idsToAdd])));
+                        }
+                      }}
+                      className="text-[11px] underline text-ink-2 hover:text-ink"
+                    >
+                      {allFamSelected ? 'Deselect family' : 'Select entire family'}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {famMembers.map((m) => {
+                      const isSelected = selectedMemberIds.includes(m.id);
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => toggleEqualMember(m.id)}
+                          className={`text-left p-1.5 border text-xs flex justify-between items-center transition-colors ${
+                            isSelected
+                              ? 'border-ink bg-paper text-ink font-medium'
+                              : 'border-rule text-ink-2 hover:border-ink'
+                          }`}
+                        >
+                          <span>{m.display_name}</span>
+                          <span className="font-mono text-xs">{isSelected ? '[x]' : '[ ]'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Solo Members */}
+            {(() => {
+              const soloMembers = members.filter((m) => !m.family_id);
+              if (soloMembers.length === 0) return null;
+              return (
+                <div className="border border-rule p-3 bg-paper-2">
+                  <span className="font-medium text-xs text-ink block mb-2">Solo Members (1 share each)</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {soloMembers.map((m) => {
+                      const isSelected = selectedMemberIds.includes(m.id);
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => toggleEqualMember(m.id)}
+                          className={`text-left p-1.5 border text-xs flex justify-between items-center transition-colors ${
+                            isSelected
+                              ? 'border-ink bg-paper text-ink font-medium'
+                              : 'border-rule text-ink-2 hover:border-ink'
+                          }`}
+                        >
+                          <span>{m.display_name}</span>
+                          <span className="font-mono text-xs">{isSelected ? '[x]' : '[ ]'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* Tab 3: Exact Split */}
         {splitType === 'exact' && (
           <div className="space-y-2">
             <p className="text-xs text-ink-2 mb-2">
@@ -413,7 +540,7 @@ export function ExpenseForm({
           </div>
         )}
 
-        {/* Tab 3: Percent Split */}
+        {/* Tab 4: Percent Split */}
         {splitType === 'percent' && (
           <div className="space-y-2">
             <p className="text-xs text-ink-2 mb-2">
@@ -446,27 +573,43 @@ export function ExpenseForm({
           </div>
         )}
 
-        {/* Tab 4: Shares Split */}
+        {/* Tab 5: Shares Split */}
         {splitType === 'shares' && (
           <div className="space-y-2">
             <p className="text-xs text-ink-2 mb-2">
-              Enter relative shares as whole numbers (e.g. 1 for single, 2 for couple):
+              Set relative weights (e.g. Adult 1, Kid 0.5):
             </p>
             <div className="space-y-2">
               {members.map((m) => (
                 <div key={m.id} className="flex items-center justify-between gap-3 text-xs">
                   <span className="text-ink flex-1 truncate">{m.display_name}</span>
-                  <div className="w-20">
-                    <input
-                      type="number"
-                      step="1"
-                      min="1"
-                      value={shares[m.id] || '1'}
-                      onChange={(e) =>
-                        setShares((prev) => ({ ...prev, [m.id]: e.target.value }))
-                      }
-                      className="w-full border border-rule bg-paper-2 px-2 py-1.5 text-xs text-ink text-right focus:border-brick font-mono"
-                    />
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setShares((prev) => ({ ...prev, [m.id]: '1' }))}
+                      className="px-2 py-1 border border-rule text-[11px] text-ink-2 hover:text-ink hover:border-ink"
+                    >
+                      Adult (1)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShares((prev) => ({ ...prev, [m.id]: '0.5' }))}
+                      className="px-2 py-1 border border-rule text-[11px] text-ink-2 hover:text-ink hover:border-ink"
+                    >
+                      Kid (0.5)
+                    </button>
+                    <div className="w-20">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0.1"
+                        value={shares[m.id] || '1'}
+                        onChange={(e) =>
+                          setShares((prev) => ({ ...prev, [m.id]: e.target.value }))
+                        }
+                        className="w-full border border-rule bg-paper-2 px-2 py-1.5 text-xs text-ink text-right focus:border-brick font-mono"
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
@@ -485,12 +628,40 @@ export function ExpenseForm({
             )}
           </div>
 
+          {/* Family breakdown if family split or family shares exist */}
+          {livePreview.familyShares && Object.keys(livePreview.familyShares).length > 0 && (
+            <div className="mb-3 space-y-1">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-ink-2 block">
+                Family & Solo shares summary
+              </span>
+              <div className="border border-rule divide-y divide-rule bg-paper">
+                {Object.entries(livePreview.familyShares).map(([key, paise]) => {
+                  const famName =
+                    families.find((f) => f.id === key)?.name ||
+                    members.find((m) => m.id === key.replace('solo:', ''))?.display_name ||
+                    'Family';
+                  return (
+                    <div key={key} className="py-1.5 px-3 flex justify-between items-center text-xs">
+                      <span className="font-medium text-ink">{famName}</span>
+                      <span className="font-mono tabular-numbers font-medium text-brick">
+                        {formatPaise(paise)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="divide-y divide-rule border border-rule text-xs">
             {members.map((m) => {
               const sharePaise = livePreview.shares[m.id] || 0;
               return (
                 <div key={m.id} className="py-2 px-3 flex justify-between items-center bg-paper-2">
-                  <span className="text-ink">{m.display_name}</span>
+                  <span className="text-ink">
+                    {m.display_name}
+                    {m.family_name ? <span className="text-ink-2 ml-1">({m.family_name})</span> : null}
+                  </span>
                   <span className="font-mono tabular-numbers text-ink font-medium">
                     {formatPaise(sharePaise)}
                   </span>

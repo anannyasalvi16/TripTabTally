@@ -47,6 +47,16 @@ export default async function SettlePage({ params }: SettlePageProps) {
     notFound();
   }
 
+  // Fetch families
+  const { data: rawFamilies } = await supabase
+    .from('trip_families')
+    .select('id, name')
+    .eq('trip_id', tripId)
+    .order('name', { ascending: true });
+
+  const families = (rawFamilies || []).map((f) => ({ id: f.id, name: f.name }));
+  const familyMap = new Map<string, string>(families.map((f) => [f.id, f.name]));
+
   // Fetch all members with user profiles (for upi_id)
   const { data: rawMembers } = await supabase
     .from('trip_members')
@@ -55,6 +65,7 @@ export default async function SettlePage({ params }: SettlePageProps) {
       display_name,
       role,
       user_id,
+      family_id,
       profiles:user_id (
         upi_id
       )
@@ -63,10 +74,13 @@ export default async function SettlePage({ params }: SettlePageProps) {
 
   const members: MemberInfo[] = (rawMembers || []).map((m) => {
     const profile = m.profiles as unknown as { upi_id?: string | null } | null;
+    const famId = m.family_id || null;
     return {
       id: m.id,
       displayName: m.display_name,
       upiId: profile?.upi_id || null,
+      familyId: famId,
+      familyName: famId ? familyMap.get(famId) || null : null,
     };
   });
 
@@ -130,7 +144,7 @@ export default async function SettlePage({ params }: SettlePageProps) {
     voided_at: null,
   }));
 
-  // Compute balances
+  // Compute individual balances
   const balances = computeBalances(
     members.map((m) => ({ id: m.id })),
     expenses,
@@ -138,7 +152,7 @@ export default async function SettlePage({ params }: SettlePageProps) {
     settlements
   );
 
-  // Compute settlement plan
+  // Compute settlement plan (individual)
   let plannedTransfers: PlannedPayment[] = [];
   try {
     const plan = planSettlement(balances);
@@ -157,6 +171,46 @@ export default async function SettlePage({ params }: SettlePageProps) {
   } catch {
     // If balances do not sum to zero (e.g. edge condition), leave plan empty
     plannedTransfers = [];
+  }
+
+  // Compute family balances & family settlement plan
+  const familyBalances = computeBalances(
+    members.map((m) => ({ id: m.id })),
+    expenses,
+    splits,
+    settlements
+  );
+  // Using computeFamilyBalances
+  const computedFamilyBalances = (await import('@/lib/money')).computeFamilyBalances(
+    balances,
+    members.map((m) => ({ id: m.id, familyId: m.familyId, displayName: m.displayName })),
+    families
+  );
+
+  const familyBalanceMap: Record<string, number> = {};
+  for (const fb of computedFamilyBalances) {
+    familyBalanceMap[fb.id] = fb.balancePaise;
+  }
+
+  let plannedFamilyTransfers: import('./SettleClientView').PlannedFamilyPayment[] = [];
+  try {
+    const famPlan = planSettlement(familyBalanceMap);
+    const unitMap = new Map(computedFamilyBalances.map((fb) => [fb.id, fb]));
+    plannedFamilyTransfers = famPlan.map((p) => {
+      const fromUnit = unitMap.get(p.from);
+      const toUnit = unitMap.get(p.to);
+      return {
+        fromId: p.from,
+        fromName: fromUnit?.name || 'Unit',
+        isFromFamily: fromUnit?.isFamily ?? false,
+        toId: p.to,
+        toName: toUnit?.name || 'Unit',
+        isToFamily: toUnit?.isFamily ?? false,
+        amountPaise: p.amount,
+      };
+    });
+  } catch {
+    plannedFamilyTransfers = [];
   }
 
   const isAllSettled =
@@ -179,9 +233,13 @@ export default async function SettlePage({ params }: SettlePageProps) {
       tripId={tripId}
       tripName={trip.name}
       members={members}
+      families={families}
       currentMemberId={currentMember.id}
       isAdmin={currentMember.role === 'admin'}
+      balances={balances}
+      familyBalances={computedFamilyBalances}
       plannedTransfers={plannedTransfers}
+      plannedFamilyTransfers={plannedFamilyTransfers}
       recordedSettlements={recordedSettlements}
       isAllSettled={isAllSettled}
     />

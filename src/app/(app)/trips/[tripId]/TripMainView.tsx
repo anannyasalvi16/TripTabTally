@@ -13,6 +13,8 @@ import type { SplitType, ExpenseCategory } from '@/lib/schemas/expense';
 interface Member {
   id: string;
   display_name: string;
+  family_id?: string | null;
+  family_name?: string | null;
 }
 
 interface MemberBalance {
@@ -44,6 +46,7 @@ interface TripMainViewProps {
   startDate?: string | null;
   endDate?: string | null;
   members: Member[];
+  families?: Array<{ id: string; name: string }>;
   expenses: ExpenseItem[];
   balances: MemberBalance[];
   isAdmin: boolean;
@@ -57,6 +60,7 @@ export function TripMainView({
   startDate,
   endDate,
   members,
+  families = [],
   expenses,
   balances,
   isAdmin,
@@ -178,6 +182,7 @@ export function TripMainView({
                 key={editingExpense ? editingExpense.id : 'new-expense'}
                 tripId={tripId}
                 members={members}
+                families={families}
                 currentMemberId={currentMemberId}
                 startDate={startDate}
                 endDate={endDate}

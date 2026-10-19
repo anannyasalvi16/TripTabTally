@@ -23,12 +23,13 @@ export function createInitialState() {
         archived_at: null,
       },
     ],
+    trip_families: [],
     trip_members: [
-      { id: 'baaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', trip_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', user_id: '11111111-1111-1111-1111-111111111111', display_name: 'Rohan Mehta', role: 'admin', left_at: null },
-      { id: 'baaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2', trip_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', user_id: '22222222-2222-2222-2222-222222222222', display_name: 'Meera Iyer', role: 'member', left_at: null },
-      { id: 'baaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3', trip_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', user_id: '33333333-3333-3333-3333-333333333333', display_name: 'Karan Verma', role: 'member', left_at: null },
-      { id: 'baaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4', trip_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', user_id: '44444444-4444-4444-4444-444444444444', display_name: 'Priya Sharma', role: 'member', left_at: null },
-      { id: 'baaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5', trip_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', user_id: null, display_name: 'Kabir', role: 'member', left_at: null },
+      { id: 'baaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', trip_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', user_id: '11111111-1111-1111-1111-111111111111', display_name: 'Rohan Mehta', role: 'admin', left_at: null, family_id: null, email: null, phone: null },
+      { id: 'baaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2', trip_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', user_id: '22222222-2222-2222-2222-222222222222', display_name: 'Meera Iyer', role: 'member', left_at: null, family_id: null, email: null, phone: null },
+      { id: 'baaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3', trip_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', user_id: '33333333-3333-3333-3333-333333333333', display_name: 'Karan Verma', role: 'member', left_at: null, family_id: null, email: null, phone: null },
+      { id: 'baaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4', trip_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', user_id: '44444444-4444-4444-4444-444444444444', display_name: 'Priya Sharma', role: 'member', left_at: null, family_id: null, email: null, phone: null },
+      { id: 'baaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5', trip_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', user_id: null, display_name: 'Kabir', role: 'member', left_at: null, family_id: null, email: null, phone: null },
     ],
     category_limits: [
       { trip_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', category: 'stay', limit_paise: 2500000 },
@@ -341,6 +342,12 @@ const server = http.createServer(async (req, res) => {
           results = results.map((m) => {
             const p = db.profiles.find((pr) => pr.id === m.user_id);
             return { ...m, profiles: p ? { upi_id: p.upi_id } : null };
+          });
+        }
+        if (select.includes('trip_families')) {
+          results = results.map((m) => {
+            const f = db.trip_families.find((fam) => fam.id === m.family_id);
+            return { ...m, trip_families: f ? { id: f.id, name: f.name } : null };
           });
         }
         if (select.includes('trip')) {

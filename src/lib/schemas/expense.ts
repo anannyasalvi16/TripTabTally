@@ -12,7 +12,7 @@ export const expenseCategories = [
 
 export type ExpenseCategory = (typeof expenseCategories)[number];
 
-export const splitTypes = ['equal', 'exact', 'percent', 'shares'] as const;
+export const splitTypes = ['equal', 'exact', 'percent', 'shares', 'family'] as const;
 export type SplitType = (typeof splitTypes)[number];
 
 export const expenseSchema = z.object({

@@ -22,6 +22,9 @@ export default async function PeoplePage({ params }: PeoplePageProps) {
       role,
       left_at,
       joined_at,
+      family_id,
+      email,
+      phone,
       profiles:user_id (
         upi_id
       )
@@ -43,6 +46,15 @@ export default async function PeoplePage({ params }: PeoplePageProps) {
     .limit(1)
     .single();
 
+  // Load families
+  const { data: rawFamilies } = await supabase
+    .from('trip_families')
+    .select('id, name')
+    .eq('trip_id', tripId)
+    .order('name', { ascending: true });
+
+  const families = (rawFamilies || []).map((f) => ({ id: f.id, name: f.name }));
+
   const members = (memberRows || []).map((m) => {
     // Cast profiles object
     const profile = m.profiles as unknown as { upi_id?: string | null } | null;
@@ -53,6 +65,9 @@ export default async function PeoplePage({ params }: PeoplePageProps) {
       role: m.role as 'admin' | 'member',
       left_at: m.left_at,
       joined_at: m.joined_at,
+      family_id: m.family_id || null,
+      email: m.email || null,
+      phone: m.phone || null,
       upi_id: profile?.upi_id || null,
     };
   });
@@ -65,6 +80,7 @@ export default async function PeoplePage({ params }: PeoplePageProps) {
       isAdmin={isAdmin}
       currentUserId={user?.id || ''}
       members={members}
+      families={families}
       inviteToken={invite?.token || null}
       siteUrl={siteUrl}
     />

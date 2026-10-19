@@ -14,10 +14,22 @@ export default async function NewExpensePage({ params }: NewExpensePageProps) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Load families
+  const { data: familyRows } = await supabase
+    .from('trip_families')
+    .select('id, name')
+    .eq('trip_id', tripId)
+    .order('created_at', { ascending: true });
+
+  const families = (familyRows || []).map((f) => ({
+    id: f.id,
+    name: f.name,
+  }));
+
   // Load members
   const { data: memberRows } = await supabase
     .from('trip_members')
-    .select('id, user_id, display_name, left_at')
+    .select('id, user_id, display_name, left_at, family_id, trip_families(id, name)')
     .eq('trip_id', tripId)
     .is('left_at', null);
 
@@ -25,10 +37,15 @@ export default async function NewExpensePage({ params }: NewExpensePageProps) {
     notFound();
   }
 
-  const members = memberRows.map((m) => ({
-    id: m.id,
-    display_name: m.display_name,
-  }));
+  const members = memberRows.map((m) => {
+    const fam = m.trip_families as unknown as { id: string; name: string } | null;
+    return {
+      id: m.id,
+      display_name: m.display_name,
+      family_id: m.family_id,
+      family_name: fam?.name || null,
+    };
+  });
 
   const currentMember = memberRows.find((m) => m.user_id === user?.id);
 
@@ -60,6 +77,7 @@ export default async function NewExpensePage({ params }: NewExpensePageProps) {
         <ExpenseForm
           tripId={tripId}
           members={members}
+          families={families}
           currentMemberId={currentMember?.id}
           startDate={trip?.start_date}
           endDate={trip?.end_date}

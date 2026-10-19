@@ -157,7 +157,8 @@ export function splitPercent(
 }
 
 /**
- * Shares split using the Largest Remainder Method based on integer weights.
+ * Shares split using the Largest Remainder Method based on numerical weights.
+ * Supports positive decimals (e.g. adults 1, kids 0.5).
  */
 export function splitShares(
   total: Paise,
@@ -171,8 +172,8 @@ export function splitShares(
   let totalShares = 0;
   for (const id of memberIds) {
     const share = shares[id] ?? 0;
-    if (share <= 0 || !Number.isInteger(share)) {
-      return { ok: false, error: 'Share counts must be positive whole numbers.' };
+    if (share <= 0 || isNaN(share) || !isFinite(share)) {
+      return { ok: false, error: 'Share counts must be positive numbers.' };
     }
     totalShares += share;
   }
@@ -215,4 +216,74 @@ export function splitShares(
   }
 
   return { ok: true, data: result };
+}
+
+export interface FamilySplitMemberInput {
+  id: string;
+  familyId?: string | null;
+}
+
+/**
+ * Equally per family split:
+ * Each participating family (and solo member acting as a 1-person unit) pays 1 equal share,
+ * divided equally among its participating members.
+ * Guarantees exact total paise with no rounding error.
+ */
+export function splitFamily(
+  total: Paise,
+  members: FamilySplitMemberInput[],
+  participatingMemberIds: string[],
+  seed: string = ''
+): Result<{
+  memberShares: Record<string, Paise>;
+  familyShares: Record<string, Paise>;
+}> {
+  const activeIds = new Set(participatingMemberIds);
+  const activeMembers = members.filter((m) => activeIds.has(m.id));
+
+  if (activeMembers.length === 0) {
+    return { ok: false, error: 'Select at least one member or family to split with.' };
+  }
+
+  // Group active members by family unit (solo members are their own 1-person unit)
+  const unitToMembers = new Map<string, string[]>();
+  for (const m of activeMembers) {
+    const unitKey = m.familyId ? `fam:${m.familyId}` : `solo:${m.id}`;
+    const list = unitToMembers.get(unitKey) || [];
+    list.push(m.id);
+    unitToMembers.set(unitKey, list);
+  }
+
+  const unitKeys = Array.from(unitToMembers.keys());
+  // Divide total equally among participating units
+  const unitShares = splitEqual(total, unitKeys, seed);
+
+  const memberShares: Record<string, Paise> = {};
+  const familyShares: Record<string, Paise> = {};
+
+  for (const [unitKey, unitPaise] of Object.entries(unitShares)) {
+    const memberList = unitToMembers.get(unitKey) || [];
+    if (memberList.length === 0) continue;
+
+    // Divide unit's share equally among its members
+    const subShares = splitEqual(unitPaise, memberList, `${seed}:${unitKey}`);
+    for (const [mid, paise] of Object.entries(subShares)) {
+      memberShares[mid] = paise;
+    }
+
+    if (unitKey.startsWith('fam:')) {
+      const famId = unitKey.replace('fam:', '');
+      familyShares[famId] = (familyShares[famId] || 0) + unitPaise;
+    } else {
+      familyShares[unitKey] = unitPaise;
+    }
+  }
+
+  return {
+    ok: true,
+    data: {
+      memberShares,
+      familyShares,
+    },
+  };
 }

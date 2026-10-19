@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import crypto from 'node:crypto';
 import { createClient } from '@/lib/supabase/server';
-import { placeholderSchema, joinTripSchema } from '@/lib/schemas/member';
+import { placeholderSchema, joinTripSchema, familySchema } from '@/lib/schemas/member';
 
 export type MemberActionResult = {
   ok: boolean;
@@ -20,12 +20,21 @@ export async function addPlaceholderAction(
   formData: FormData
 ): Promise<MemberActionResult> {
   const displayName = String(formData.get('displayName') || '');
-  const parsed = placeholderSchema.safeParse({ displayName });
+  const rawEmail = String(formData.get('email') || '').trim();
+  const rawPhone = String(formData.get('phone') || '').trim();
+  const rawFamilyId = String(formData.get('familyId') || '').trim();
+
+  const parsed = placeholderSchema.safeParse({
+    displayName,
+    email: rawEmail || undefined,
+    phone: rawPhone || undefined,
+    familyId: rawFamilyId || null,
+  });
 
   if (!parsed.success) {
     return {
       ok: false,
-      message: parsed.error.errors[0]?.message || 'Invalid display name.',
+      message: parsed.error.errors[0]?.message || 'Invalid member data.',
     };
   }
 
@@ -33,6 +42,9 @@ export async function addPlaceholderAction(
   const { error } = await supabase.from('trip_members').insert({
     trip_id: tripId,
     display_name: parsed.data.displayName,
+    email: parsed.data.email || null,
+    phone: parsed.data.phone || null,
+    family_id: parsed.data.familyId || null,
     role: 'member',
     user_id: null,
   });
@@ -44,7 +56,90 @@ export async function addPlaceholderAction(
   revalidatePath(`/trips/${tripId}/people`);
   return {
     ok: true,
-    message: `Added placeholder member "${parsed.data.displayName}".`,
+    message: `Added member "${parsed.data.displayName}".`,
+  };
+}
+
+export const addManualMemberAction = addPlaceholderAction;
+
+export async function createFamilyAction(
+  tripId: string,
+  prevState: MemberActionResult | null,
+  formData: FormData
+): Promise<MemberActionResult> {
+  const name = String(formData.get('name') || '');
+  const parsed = familySchema.safeParse({ name });
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: parsed.error.errors[0]?.message || 'Invalid family name.',
+    };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from('trip_families').insert({
+    trip_id: tripId,
+    name: parsed.data.name,
+  });
+
+  if (error) {
+    if (error.code === '23505') {
+      return { ok: false, message: 'A family with this name already exists in this trip.' };
+    }
+    return { ok: false, message: error.message };
+  }
+
+  revalidatePath(`/trips/${tripId}/people`);
+  return {
+    ok: true,
+    message: `Created "${parsed.data.name}".`,
+  };
+}
+
+export async function updateMemberFamilyAction(
+  tripId: string,
+  memberId: string,
+  familyId: string | null
+): Promise<MemberActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('trip_members')
+    .update({ family_id: familyId })
+    .eq('id', memberId)
+    .eq('trip_id', tripId);
+
+  if (error) {
+    return { ok: false, message: error.message };
+  }
+
+  revalidatePath(`/trips/${tripId}/people`);
+  return {
+    ok: true,
+    message: 'Updated family assignment.',
+  };
+}
+
+export async function deleteFamilyAction(
+  tripId: string,
+  familyId: string,
+  familyName: string
+): Promise<MemberActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('trip_families')
+    .delete()
+    .eq('id', familyId)
+    .eq('trip_id', tripId);
+
+  if (error) {
+    return { ok: false, message: error.message };
+  }
+
+  revalidatePath(`/trips/${tripId}/people`);
+  return {
+    ok: true,
+    message: `Removed "${familyName}". Members are now marked as solo.`,
   };
 }
 

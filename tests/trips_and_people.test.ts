@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { tripSchema } from '@/lib/schemas/trip';
-import { placeholderSchema, joinTripSchema } from '@/lib/schemas/member';
+import { placeholderSchema, joinTripSchema, familySchema } from '@/lib/schemas/member';
 
 describe('Trip Schema Validation', () => {
   it('validates correct trip inputs', () => {
@@ -128,12 +128,55 @@ describe('Trip Schema Validation', () => {
 });
 
 describe('Member and Join Schema Validation', () => {
-  it('validates placeholder display name', () => {
+  it('validates manual member display name only', () => {
     const valid = placeholderSchema.safeParse({ displayName: 'Kabir' });
     expect(valid.success).toBe(true);
 
     const empty = placeholderSchema.safeParse({ displayName: '' });
     expect(empty.success).toBe(false);
+  });
+
+  it('validates manual member with optional email, phone, and familyId', () => {
+    const validFull = placeholderSchema.safeParse({
+      displayName: 'Kabir Sharma',
+      email: 'kabir@example.com',
+      phone: '+91 9876543210',
+      familyId: '11111111-1111-1111-1111-111111111111',
+    });
+    expect(validFull.success).toBe(true);
+
+    const validEmptyOptionals = placeholderSchema.safeParse({
+      displayName: 'Kabir Sharma',
+      email: '',
+      phone: '',
+      familyId: '',
+    });
+    expect(validEmptyOptionals.success).toBe(true);
+  });
+
+  it('rejects invalid email or phone for manual member', () => {
+    const invalidEmail = placeholderSchema.safeParse({
+      displayName: 'Kabir',
+      email: 'not-an-email',
+    });
+    expect(invalidEmail.success).toBe(false);
+
+    const invalidPhone = placeholderSchema.safeParse({
+      displayName: 'Kabir',
+      phone: 'invalid-phone-abc',
+    });
+    expect(invalidPhone.success).toBe(false);
+  });
+
+  it('validates family schema', () => {
+    const valid = familySchema.safeParse({ name: 'Sharma family' });
+    expect(valid.success).toBe(true);
+
+    const empty = familySchema.safeParse({ name: '' });
+    expect(empty.success).toBe(false);
+
+    const tooLong = familySchema.safeParse({ name: 'A'.repeat(61) });
+    expect(tooLong.success).toBe(false);
   });
 
   it('validates join trip schema', () => {

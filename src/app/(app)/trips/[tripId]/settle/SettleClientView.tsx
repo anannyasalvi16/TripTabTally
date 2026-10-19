@@ -6,13 +6,15 @@ import {
   voidSettlementAction,
   type ActionState,
 } from '@/actions/settlements';
-import { formatPaise } from '@/lib/money';
+import { formatPaise, type FamilyBalanceOutput } from '@/lib/money';
 import { buildUpiLink } from '@/lib/upi';
 
 export interface MemberInfo {
   id: string;
   displayName: string;
   upiId?: string | null;
+  familyId?: string | null;
+  familyName?: string | null;
 }
 
 export interface PlannedPayment {
@@ -21,6 +23,16 @@ export interface PlannedPayment {
   toId: string;
   toName: string;
   toUpiId?: string | null;
+  amountPaise: number;
+}
+
+export interface PlannedFamilyPayment {
+  fromId: string;
+  fromName: string;
+  isFromFamily: boolean;
+  toId: string;
+  toName: string;
+  isToFamily: boolean;
   amountPaise: number;
 }
 
@@ -40,9 +52,13 @@ interface SettleClientViewProps {
   tripId: string;
   tripName: string;
   members: MemberInfo[];
+  families: Array<{ id: string; name: string }>;
   currentMemberId: string;
   isAdmin: boolean;
+  balances: Record<string, number>;
+  familyBalances: FamilyBalanceOutput[];
   plannedTransfers: PlannedPayment[];
+  plannedFamilyTransfers: PlannedFamilyPayment[];
   recordedSettlements: RecordedSettlement[];
   isAllSettled: boolean;
 }
@@ -51,12 +67,18 @@ export function SettleClientView({
   tripId,
   tripName,
   members,
+  families,
   currentMemberId,
   isAdmin,
+  balances,
+  familyBalances,
   plannedTransfers,
+  plannedFamilyTransfers,
   recordedSettlements,
   isAllSettled,
 }: SettleClientViewProps) {
+  const [viewMode, setViewMode] = useState<'individual' | 'family'>('individual');
+
   const [recordState, recordAction, isPendingRecord] = useActionState<ActionState | null, FormData>(
     recordSettlementAction,
     null
@@ -125,6 +147,116 @@ export function SettleClientView({
         </div>
       )}
 
+      {/* View Mode Toggle */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="inline-flex border border-rule">
+          <button
+            type="button"
+            onClick={() => setViewMode('individual')}
+            className={`px-3 py-1.5 text-xs font-mono transition-colors ${
+              viewMode === 'individual'
+                ? 'bg-ink text-paper font-medium'
+                : 'bg-paper text-ink-2 hover:text-ink'
+            }`}
+          >
+            Individual (Person)
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('family')}
+            className={`px-3 py-1.5 text-xs font-mono border-l border-rule transition-colors ${
+              viewMode === 'family'
+                ? 'bg-ink text-paper font-medium'
+                : 'bg-paper text-ink-2 hover:text-ink'
+            }`}
+          >
+            Family
+          </button>
+        </div>
+        <span className="text-xs text-ink-2 font-mono">
+          {viewMode === 'individual'
+            ? `${members.length} members`
+            : `${familyBalances.length} units (${families.length} ${
+                families.length === 1 ? 'family' : 'families'
+              })`}
+        </span>
+      </div>
+
+      {/* Net Balances Summary */}
+      <div className="border border-rule p-4 bg-paper space-y-3">
+        <div className="flex justify-between items-baseline border-b border-rule pb-1.5">
+          <h3 className="font-serif text-base text-ink font-normal">
+            {viewMode === 'individual'
+              ? 'Individual net balances'
+              : 'Family & solo net balances'}
+          </h3>
+          <span className="text-[11px] text-ink-2 font-mono">
+            Zero-sum ledger
+          </span>
+        </div>
+
+        <div className="divide-y divide-rule text-xs">
+          {viewMode === 'individual' ? (
+            members.map((m) => {
+              const bal = balances[m.id] || 0;
+              return (
+                <div key={m.id} className="py-2 flex items-center justify-between">
+                  <div>
+                    <span className="font-medium text-ink">{m.displayName}</span>
+                    {m.familyName && (
+                      <span className="text-ink-2 ml-1.5 text-[11px]">
+                        ({m.familyName})
+                      </span>
+                    )}
+                  </div>
+                  <div className="font-mono tabular-nums">
+                    {bal > 0 ? (
+                      <span className="text-moss font-medium">
+                        +{formatPaise(bal)} (owed)
+                      </span>
+                    ) : bal < 0 ? (
+                      <span className="text-brick font-medium">
+                        -{formatPaise(Math.abs(bal))} (owes)
+                      </span>
+                    ) : (
+                      <span className="text-ink-2">Settled</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            familyBalances.map((fb) => (
+              <div key={fb.id} className="py-2 flex items-center justify-between">
+                <div>
+                  <span className="font-medium text-ink">{fb.name}</span>
+                  <span className="text-ink-2 ml-1.5 text-[11px]">
+                    {fb.isFamily
+                      ? `(${fb.memberIds.length} ${
+                          fb.memberIds.length === 1 ? 'member' : 'members'
+                        })`
+                      : '(Solo)'}
+                  </span>
+                </div>
+                <div className="font-mono tabular-nums">
+                  {fb.balancePaise > 0 ? (
+                    <span className="text-moss font-medium">
+                      +{formatPaise(fb.balancePaise)} (owed)
+                    </span>
+                  ) : fb.balancePaise < 0 ? (
+                    <span className="text-brick font-medium">
+                      -{formatPaise(Math.abs(fb.balancePaise))} (owes)
+                    </span>
+                  ) : (
+                    <span className="text-ink-2">Settled</span>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
       {/* Settled state badge or Planned Transfers */}
       {isAllSettled ? (
         <div className="border border-rule p-5 bg-paper">
@@ -136,11 +268,11 @@ export function SettleClientView({
             Everyone is even. No outstanding debts remaining for this trip.
           </p>
         </div>
-      ) : (
+      ) : viewMode === 'individual' ? (
         <div className="space-y-4">
           <div className="border-b border-rule pb-1.5 flex justify-between items-baseline">
             <h3 className="font-serif text-lg text-ink font-normal">
-              Recommended payments ({plannedTransfers.length})
+              Recommended individual payments ({plannedTransfers.length})
             </h3>
             <span className="text-xs text-ink-2 font-mono">
               Simplified to fewest transfers
@@ -238,6 +370,46 @@ export function SettleClientView({
             </div>
           )}
         </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="border-b border-rule pb-1.5 flex justify-between items-baseline">
+            <h3 className="font-serif text-lg text-ink font-normal">
+              Recommended family payments ({plannedFamilyTransfers.length})
+            </h3>
+            <span className="text-xs text-ink-2 font-mono">
+              Simplified across families & solo members
+            </span>
+          </div>
+
+          {plannedFamilyTransfers.length === 0 ? (
+            <p className="text-xs text-ink-2 py-4 border-t border-rule">
+              All families and members are even.
+            </p>
+          ) : (
+            <div className="border-t border-rule divide-y divide-rule text-xs">
+              {plannedFamilyTransfers.map((p, idx) => (
+                <div
+                  key={`${p.fromId}-${p.toId}-${idx}`}
+                  className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-ink">{p.fromName}</span>
+                      <span className="text-ink-2">pays</span>
+                      <span className="font-medium text-ink">{p.toName}</span>
+                      <span className="font-mono text-sm tabular-nums font-medium text-brick ml-2">
+                        {formatPaise(p.amountPaise)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-ink-2 mt-1">
+                      Family settlement. To record, pick a member from each family in the custom payment form below or switch to Individual view.
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Toggle manual record settlement form */}
@@ -274,6 +446,7 @@ export function SettleClientView({
                   {members.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.displayName}
+                      {m.familyName ? ` (${m.familyName})` : ''}
                     </option>
                   ))}
                 </select>
@@ -291,6 +464,7 @@ export function SettleClientView({
                   {members.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.displayName}
+                      {m.familyName ? ` (${m.familyName})` : ''}
                     </option>
                   ))}
                 </select>

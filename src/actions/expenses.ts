@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { parseRupeesToPaise, formatPaise, splitEqual, splitExact, splitPercent, splitShares } from '@/lib/money';
+import { parseRupeesToPaise, formatPaise, splitEqual, splitExact, splitPercent, splitShares, splitFamily } from '@/lib/money';
 import { expenseSchema, validateExpenseDate, parseDateInput, type SplitType, type ExpenseCategory } from '@/lib/schemas/expense';
 
 export type ExpenseActionResult = {
@@ -119,13 +119,31 @@ export async function saveExpenseAction(
   } else if (splitType === 'shares') {
     const sharesMap: Record<string, number> = {};
     for (const [mid, strVal] of Object.entries(splitInput.shares || {})) {
-      sharesMap[mid] = parseInt(String(strVal || '1'), 10);
+      sharesMap[mid] = parseFloat(String(strVal || '1'));
     }
     const res = splitShares(amountPaise, sharesMap);
     if (!res.ok) {
       return { ok: false, message: res.error };
     }
     calculatedSplits = res.data;
+  } else if (splitType === 'family') {
+    const { data: tripMembers } = await supabase
+      .from('trip_members')
+      .select('id, family_id')
+      .eq('trip_id', tripId)
+      .is('left_at', null);
+
+    const membersList = (tripMembers || []).map((m) => ({
+      id: m.id,
+      familyId: m.family_id,
+    }));
+
+    const memberIds = Array.isArray(splitInput.memberIds) ? splitInput.memberIds : membersList.map((m) => m.id);
+    const res = splitFamily(amountPaise, membersList, memberIds, expenseId || title);
+    if (!res.ok) {
+      return { ok: false, message: res.error };
+    }
+    calculatedSplits = res.data.memberShares;
   }
 
   // Prepare database split payload

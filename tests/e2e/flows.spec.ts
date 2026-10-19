@@ -33,11 +33,12 @@ test.describe('TRD Section 14 End-to-End User Journeys and Accessibility', () =>
     await expect(page.locator('#title')).toBeVisible();
     await expect(page.locator('#amountRupees')).toBeVisible();
 
-    // 5. Check all four split type options are present and selectable
-    await expect(page.locator('button:has-text("Equal")')).toBeVisible();
-    await expect(page.locator('button:has-text("Exact")')).toBeVisible();
-    await expect(page.locator('button:has-text("Percent")')).toBeVisible();
-    await expect(page.locator('button:has-text("Shares")')).toBeVisible();
+    // 5. Check all split type options are present and selectable
+    await expect(page.getByRole('button', { name: 'Equally per person' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Equally per family' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Custom amounts' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Percentage' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Weighted shares' })).toBeVisible();
   });
 
   test('Flow 2: Invite flow - open invite in a second context, view placeholders, and claim', async ({
