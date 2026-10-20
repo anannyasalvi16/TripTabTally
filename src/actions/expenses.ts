@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { parseRupeesToPaise, formatPaise, splitEqual, splitExact, splitPercent, splitShares, splitFamily } from '@/lib/money';
 import { expenseSchema, validateExpenseDate, parseDateInput, type SplitType, type ExpenseCategory } from '@/lib/schemas/expense';
+import { generateRecurringDates } from '@/lib/recurring';
 
 export type ExpenseActionResult = {
   ok: boolean;
@@ -34,6 +35,12 @@ export async function saveExpenseAction(
   const rawSplitInput = String(formData.get('splitInput') || '{}');
   const expectedVersionStr = String(formData.get('version') || '');
   const expectedVersion = expectedVersionStr ? parseInt(expectedVersionStr, 10) : undefined;
+
+  const isRecurring = formData.get('isRecurring') === 'true';
+  const repeatFrequency = String(formData.get('repeatFrequency') || 'daily') as 'daily' | 'weekly' | 'custom';
+  const repeatIntervalDays = parseInt(String(formData.get('repeatIntervalDays') || '1'), 10) || 1;
+  const repeatEndDate = String(formData.get('repeatEndDate') || '');
+  const recurrenceScope = String(formData.get('recurrenceScope') || 'single') as 'single' | 'future' | 'all';
 
   let splitInput: Record<string, any> = {};
   try {
@@ -158,7 +165,180 @@ export async function saveExpenseAction(
     return { ok: false, message: 'At least one member must be included in the split.' };
   }
 
-  // Call atomic save_expense database function
+  // 1. Create recurring series if isRecurring is enabled for new expense
+  if (!expenseId && isRecurring) {
+    const rawRepeatEndDate = parseDateInput(repeatEndDate) || repeatEndDate;
+    const intervalDays =
+      repeatFrequency === 'daily' ? 1 : repeatFrequency === 'weekly' ? 7 : repeatIntervalDays;
+
+    const { dates, error: dateGenError } = generateRecurringDates({
+      startDate: dateValidation.isoDate || spentOn,
+      endDate: rawRepeatEndDate,
+      tripStartDate: effectiveStartDate,
+      tripEndDate: effectiveEndDate,
+      frequency: repeatFrequency,
+      intervalDays,
+    });
+
+    if (dateGenError) {
+      return { ok: false, message: dateGenError };
+    }
+
+    if (dates.length > 1) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const { data: creatorMember } = await supabase
+        .from('trip_members')
+        .select('id')
+        .eq('trip_id', tripId)
+        .eq('user_id', user?.id || '')
+        .is('left_at', null)
+        .single();
+
+      const { data: newRule, error: ruleErr } = await supabase
+        .from('recurring_rules')
+        .insert({
+          trip_id: tripId,
+          frequency: repeatFrequency,
+          interval_days: intervalDays,
+          start_date: dates[0],
+          end_date: dates[dates.length - 1],
+          created_by: creatorMember?.id || null,
+        })
+        .select('id')
+        .single();
+
+      if (ruleErr) {
+        return { ok: false, message: ruleErr.message };
+      }
+
+      let firstExpenseId: string | undefined;
+      for (let i = 0; i < dates.length; i++) {
+        const occDate = dates[i];
+        const { data: rpcData, error: occError } = await supabase.rpc('save_expense', {
+          p_expense_id: null,
+          p_trip_id: tripId,
+          p_title: title.trim(),
+          p_amount_paise: amountPaise,
+          p_category: category,
+          p_paid_by: paidBy,
+          p_spent_on: occDate,
+          p_note: note.trim() || null,
+          p_split_type: splitType,
+          p_split_input: splitInput,
+          p_splits: splitsPayload,
+          p_expected_version: null,
+        });
+
+        if (occError) {
+          return { ok: false, message: occError.message };
+        }
+
+        const expRes = rpcData as { ok: boolean; expense_id?: string } | string;
+        const newExpId = typeof expRes === 'string' ? expRes : (expRes as any)?.expense_id;
+
+        if (newExpId) {
+          if (!firstExpenseId) firstExpenseId = newExpId;
+          await supabase
+            .from('expenses')
+            .update({
+              recurring_rule_id: newRule.id,
+              recurring_sequence: i + 1,
+            })
+            .eq('id', newExpId);
+        }
+      }
+
+      revalidatePath(`/trips/${tripId}`);
+      revalidatePath(`/trips/${tripId}/budget`);
+      revalidatePath(`/trips/${tripId}/settle`);
+
+      return {
+        ok: true,
+        expenseId: firstExpenseId,
+        message: `Created recurring series of ${dates.length} expenses for "${title.trim()}".`,
+      };
+    }
+  }
+
+  // 2. Update recurring series if editing with future/all scope
+  if (expenseId && (recurrenceScope === 'future' || recurrenceScope === 'all')) {
+    const { data: currentExp } = await supabase
+      .from('expenses')
+      .select('recurring_rule_id, spent_on')
+      .eq('id', expenseId)
+      .eq('trip_id', tripId)
+      .single();
+
+    if (currentExp?.recurring_rule_id) {
+      let query = supabase
+        .from('expenses')
+        .select('id, spent_on')
+        .eq('trip_id', tripId)
+        .eq('recurring_rule_id', currentExp.recurring_rule_id)
+        .neq('id', expenseId)
+        .is('deleted_at', null);
+
+      if (recurrenceScope === 'future') {
+        query = query.gte('spent_on', currentExp.spent_on);
+      }
+
+      const { data: siblingExpenses } = await query;
+
+      const { data: rpcData, error: updateError } = await supabase.rpc('save_expense', {
+        p_expense_id: expenseId,
+        p_trip_id: tripId,
+        p_title: title.trim(),
+        p_amount_paise: amountPaise,
+        p_category: category,
+        p_paid_by: paidBy,
+        p_spent_on: dateValidation.isoDate || spentOn,
+        p_note: note.trim() || null,
+        p_split_type: splitType,
+        p_split_input: splitInput,
+        p_splits: splitsPayload,
+        p_expected_version: expectedVersion || null,
+      });
+
+      if (updateError) {
+        return { ok: false, message: updateError.message };
+      }
+
+      for (const sib of siblingExpenses || []) {
+        await supabase.rpc('save_expense', {
+          p_expense_id: sib.id,
+          p_trip_id: tripId,
+          p_title: title.trim(),
+          p_amount_paise: amountPaise,
+          p_category: category,
+          p_paid_by: paidBy,
+          p_spent_on: sib.spent_on,
+          p_note: note.trim() || null,
+          p_split_type: splitType,
+          p_split_input: splitInput,
+          p_splits: splitsPayload,
+          p_expected_version: null,
+        });
+      }
+
+      revalidatePath(`/trips/${tripId}`);
+      revalidatePath(`/trips/${tripId}/budget`);
+      revalidatePath(`/trips/${tripId}/settle`);
+
+      return {
+        ok: true,
+        expenseId,
+        message:
+          recurrenceScope === 'all'
+            ? `Updated all expenses in recurring series for "${title.trim()}".`
+            : `Updated this and future expenses in recurring series for "${title.trim()}".`,
+      };
+    }
+  }
+
+  // 3. Standard single save_expense
   const { data: rpcData, error } = await supabase.rpc('save_expense', {
     p_expense_id: expenseId || null,
     p_trip_id: tripId,
@@ -215,9 +395,49 @@ export async function saveExpenseAction(
 export async function deleteExpenseAction(
   tripId: string,
   expenseId: string,
-  title: string
+  title: string,
+  scope: 'single' | 'future' | 'all' = 'single'
 ): Promise<ExpenseActionResult> {
   const supabase = await createClient();
+
+  if (scope !== 'single') {
+    const { data: targetExp } = await supabase
+      .from('expenses')
+      .select('recurring_rule_id, spent_on')
+      .eq('id', expenseId)
+      .eq('trip_id', tripId)
+      .single();
+
+    if (targetExp?.recurring_rule_id) {
+      let query = supabase
+        .from('expenses')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('trip_id', tripId)
+        .eq('recurring_rule_id', targetExp.recurring_rule_id);
+
+      if (scope === 'future') {
+        query = query.gte('spent_on', targetExp.spent_on);
+      }
+
+      const { error } = await query;
+      if (error) {
+        return { ok: false, message: error.message };
+      }
+
+      revalidatePath(`/trips/${tripId}`);
+      revalidatePath(`/trips/${tripId}/budget`);
+      revalidatePath(`/trips/${tripId}/settle`);
+
+      return {
+        ok: true,
+        expenseId,
+        message:
+          scope === 'all'
+            ? `Removed all expenses in recurring series for "${title}".`
+            : `Removed this and future recurring expenses for "${title}".`,
+      };
+    }
+  }
 
   const { error } = await supabase
     .from('expenses')

@@ -74,6 +74,8 @@ export default async function TripOverviewPage({ params, searchParams }: TripPag
       note,
       created_by,
       version,
+      recurring_rule_id,
+      recurring_sequence,
       payer:paid_by (display_name),
       splits:expense_splits (count)
     `)
@@ -148,6 +150,8 @@ export default async function TripOverviewPage({ params, searchParams }: TripPag
       note: e.note,
       created_by: e.created_by,
       version: e.version,
+      recurring_rule_id: (e as any).recurring_rule_id || null,
+      recurring_sequence: (e as any).recurring_sequence || null,
       payerName: payerObj?.display_name || 'Member',
       splitsCount: splitCountObj?.[0]?.count ?? 0,
     };

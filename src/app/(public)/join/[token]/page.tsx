@@ -30,7 +30,7 @@ export default async function JoinPage({ params }: JoinPageProps) {
   const isInvalid =
     !invite ||
     Boolean(invite.revoked_at) ||
-    new Date(invite.expires_at) < new Date() ||
+    (Boolean(invite.expires_at) && new Date(invite.expires_at) < new Date()) ||
     !invite.trip;
 
   if (isInvalid) {

@@ -17,6 +17,8 @@ interface ExpenseItem {
   version: number;
   payerName: string;
   splitsCount: number;
+  recurring_rule_id?: string | null;
+  recurring_sequence?: number | null;
 }
 
 interface ExpenseListProps {
@@ -38,24 +40,36 @@ export function ExpenseList({
     null
   );
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [recurringDeleteExpense, setRecurringDeleteExpense] = useState<ExpenseItem | null>(null);
 
-  async function handleDelete(expense: ExpenseItem) {
-    if (!window.confirm(`Delete "${expense.title}"?`)) return;
+  async function executeDelete(expense: ExpenseItem, scope: 'single' | 'future' | 'all') {
     setDeletingId(expense.id);
+    setRecurringDeleteExpense(null);
     try {
-      const res = await deleteExpenseAction(tripId, expense.id, expense.title);
+      const res = await deleteExpenseAction(tripId, expense.id, expense.title, scope);
       if (res.ok) {
         setNotice({
           message: res.message || `Removed "${expense.title}".`,
-          undoId: expense.id,
-          undoTitle: expense.title,
+          undoId: scope === 'single' ? expense.id : undefined,
+          undoTitle: scope === 'single' ? expense.title : undefined,
         });
+      } else {
+        setNotice({ message: res.message || 'Could not delete expense.' });
       }
     } catch {
       setNotice({ message: 'Could not delete expense.' });
     } finally {
       setDeletingId(null);
     }
+  }
+
+  function handleDeleteClick(expense: ExpenseItem) {
+    if (expense.recurring_rule_id) {
+      setRecurringDeleteExpense(expense);
+      return;
+    }
+    if (!window.confirm(`Delete "${expense.title}"?`)) return;
+    executeDelete(expense, 'single');
   }
 
   async function handleUndo() {
@@ -105,9 +119,19 @@ export function ExpenseList({
                 {/* Mobile: Line 1 (title & amount) | Desktop: left cell */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between sm:justify-start gap-2">
-                    <span className="font-medium text-ink text-sm truncate">
-                      {expense.title}
-                    </span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-medium text-ink text-sm truncate">
+                        {expense.title}
+                      </span>
+                      {expense.recurring_rule_id && (
+                        <span
+                          title={expense.recurring_sequence ? `Occurrence #${expense.recurring_sequence}` : 'Recurring expense'}
+                          className="text-[10px] font-mono uppercase px-1.5 py-0.2 border border-rule text-ink-2 shrink-0"
+                        >
+                          Recurring
+                        </span>
+                      )}
+                    </div>
                     <span className="sm:hidden font-mono text-sm tabular-numbers text-ink font-medium">
                       {formatPaise(expense.amount_paise)}
                     </span>
@@ -151,7 +175,7 @@ export function ExpenseList({
                       )}
                       <button
                         type="button"
-                        onClick={() => handleDelete(expense)}
+                        onClick={() => handleDeleteClick(expense)}
                         disabled={deletingId === expense.id}
                         className="text-brick hover:underline disabled:opacity-50"
                       >
@@ -182,7 +206,7 @@ export function ExpenseList({
                     )}
                     <button
                       type="button"
-                      onClick={() => handleDelete(expense)}
+                      onClick={() => handleDeleteClick(expense)}
                       disabled={deletingId === expense.id}
                       className="text-brick hover:underline disabled:opacity-50"
                     >
@@ -193,6 +217,54 @@ export function ExpenseList({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Recurring Delete Modal */}
+      {recurringDeleteExpense && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-paper border border-ink p-6 max-w-sm w-full space-y-4">
+            <div className="flex justify-between items-baseline border-b border-rule pb-2">
+              <h4 className="font-serif text-base text-ink font-normal">
+                Delete recurring expense
+              </h4>
+              <button
+                type="button"
+                onClick={() => setRecurringDeleteExpense(null)}
+                className="text-xs text-ink-2 hover:text-ink font-mono"
+              >
+                [Cancel]
+              </button>
+            </div>
+
+            <p className="text-xs text-ink">
+              &ldquo;{recurringDeleteExpense.title}&rdquo; is part of a recurring series. How would you like to delete?
+            </p>
+
+            <div className="space-y-2 pt-2 text-xs">
+              <button
+                type="button"
+                onClick={() => executeDelete(recurringDeleteExpense, 'single')}
+                className="w-full text-left px-3 py-2 border border-rule hover:bg-paper-2 text-ink font-medium"
+              >
+                Only this expense
+              </button>
+              <button
+                type="button"
+                onClick={() => executeDelete(recurringDeleteExpense, 'future')}
+                className="w-full text-left px-3 py-2 border border-rule hover:bg-paper-2 text-ink font-medium"
+              >
+                This and future expenses in series
+              </button>
+              <button
+                type="button"
+                onClick={() => executeDelete(recurringDeleteExpense, 'all')}
+                className="w-full text-left px-3 py-2 border border-brick bg-paper text-brick hover:bg-paper-2 font-medium"
+              >
+                All expenses in series
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

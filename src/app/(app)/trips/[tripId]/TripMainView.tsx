@@ -37,6 +37,8 @@ interface ExpenseItem {
   splitsCount: number;
   split_input?: Record<string, any>;
   note?: string | null;
+  recurring_rule_id?: string | null;
+  recurring_sequence?: number | null;
 }
 
 interface TripMainViewProps {
@@ -199,6 +201,7 @@ export function TripMainView({
                         splitType: (editingExpense.split_type || 'equal') as SplitType,
                         splitInput: editingExpense.split_input || {},
                         version: editingExpense.version,
+                        recurringRuleId: editingExpense.recurring_rule_id || null,
                       }
                     : undefined
                 }

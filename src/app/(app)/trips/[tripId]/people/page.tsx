@@ -36,15 +36,68 @@ export default async function PeoplePage({ params }: PeoplePageProps) {
   const isAdmin = currentMember?.role === 'admin';
 
   // Load active invite token
-  const { data: invite } = await supabase
+  const { data: rawInvites } = await supabase
     .from('invites')
-    .select('token')
+    .select('token, expires_at')
     .eq('trip_id', tripId)
     .is('revoked_at', null)
-    .gt('expires_at', new Date().toISOString())
-    .order('expires_at', { ascending: false })
-    .limit(1)
-    .single();
+    .order('expires_at', { ascending: false });
+
+  const activeInvite = (rawInvites || []).find(
+    (inv) => !inv.expires_at || new Date(inv.expires_at) > new Date()
+  );
+
+  // Fetch non-deleted expenses for balances
+  const { data: rawExpenses } = await supabase
+    .from('expenses')
+    .select('id, paid_by, amount_paise')
+    .eq('trip_id', tripId)
+    .is('deleted_at', null);
+
+  const expenses = (rawExpenses || []).map((e) => ({
+    id: e.id,
+    paid_by: e.paid_by,
+    amount_paise: Number(e.amount_paise),
+    deleted_at: null,
+  }));
+
+  const expenseIds = expenses.map((e) => e.id);
+  let splits: Array<{ expense_id: string; member_id: string; share_paise: number }> = [];
+  if (expenseIds.length > 0) {
+    const { data: rawSplits } = await supabase
+      .from('expense_splits')
+      .select('expense_id, member_id, share_paise')
+      .in('expense_id', expenseIds);
+
+    splits = (rawSplits || []).map((s) => ({
+      expense_id: s.expense_id,
+      member_id: s.member_id,
+      share_paise: Number(s.share_paise),
+    }));
+  }
+
+  // Fetch settlements
+  const { data: rawSettlements } = await supabase
+    .from('settlements')
+    .select('id, from_member, to_member, amount_paise')
+    .eq('trip_id', tripId)
+    .is('voided_at', null);
+
+  const settlements = (rawSettlements || []).map((s) => ({
+    id: s.id,
+    from_member: s.from_member,
+    to_member: s.to_member,
+    amount_paise: Number(s.amount_paise),
+    voided_at: null,
+  }));
+
+  const { computeBalances } = await import('@/lib/money');
+  const balances = computeBalances(
+    (memberRows || []).map((m) => ({ id: m.id })),
+    expenses,
+    splits,
+    settlements
+  );
 
   // Load families
   const { data: rawFamilies } = await supabase
@@ -81,7 +134,9 @@ export default async function PeoplePage({ params }: PeoplePageProps) {
       currentUserId={user?.id || ''}
       members={members}
       families={families}
-      inviteToken={invite?.token || null}
+      inviteToken={activeInvite?.token || null}
+      inviteExpiresAt={activeInvite?.expires_at || null}
+      memberBalances={balances}
       siteUrl={siteUrl}
     />
   );

@@ -20,6 +20,7 @@ import {
   type ExpenseCategory,
   type SplitType,
 } from '@/lib/schemas/expense';
+import { formatRecurrenceSummary } from '@/lib/recurring';
 import { MoneyInput } from './MoneyInput';
 import { DateInput } from './DateInput';
 
@@ -55,6 +56,7 @@ interface ExpenseFormProps {
     splitType: SplitType;
     splitInput?: Record<string, any>;
     version?: number;
+    recurringRuleId?: string | null;
   };
   onSuccess?: () => void;
 }
@@ -94,6 +96,13 @@ export function ExpenseForm({
   const [dateError, setDateError] = useState<string | null>(null);
   const [note, setNote] = useState(initialData?.note || '');
   const [splitType, setSplitType] = useState<SplitType>(initialData?.splitType || 'equal');
+
+  // Recurrence states
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [repeatFrequency, setRepeatFrequency] = useState<'daily' | 'weekly' | 'custom'>('daily');
+  const [repeatIntervalDays, setRepeatIntervalDays] = useState(2);
+  const [repeatEndDate, setRepeatEndDate] = useState(endDate || spentOn);
+  const [recurrenceScope, setRecurrenceScope] = useState<'single' | 'future' | 'all'>('single');
 
   // Equal split selection (default: all members)
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>(
@@ -246,6 +255,13 @@ export function ExpenseForm({
       )}
       <input type="hidden" name="splitType" value={splitType} />
       <input type="hidden" name="splitInput" value={JSON.stringify(splitInputPayload)} />
+      <input type="hidden" name="isRecurring" value={isRecurring ? 'true' : 'false'} />
+      <input type="hidden" name="repeatFrequency" value={repeatFrequency} />
+      <input type="hidden" name="repeatIntervalDays" value={repeatIntervalDays.toString()} />
+      <input type="hidden" name="repeatEndDate" value={repeatEndDate} />
+      {initialData?.recurringRuleId && (
+        <input type="hidden" name="recurrenceScope" value={recurrenceScope} />
+      )}
 
       {(dateError || (state && !state.ok && state.message)) && (
         <div className="p-3 border border-brick text-brick text-xs bg-paper-2">
@@ -363,6 +379,141 @@ export function ExpenseForm({
           className="w-full border border-rule bg-paper-2 px-3 py-2 text-sm text-ink placeholder:text-ink-2 focus:border-brick"
         />
       </div>
+
+      {/* Recurring Series Scope when editing */}
+      {initialData?.recurringRuleId && (
+        <div className="border border-rule p-4 bg-paper space-y-2">
+          <span className="text-xs font-mono uppercase text-ink-2 block">
+            Recurring series update
+          </span>
+          <p className="text-xs text-ink-2">
+            This expense is part of a recurring series. Choose which occurrences to update:
+          </p>
+          <div className="space-y-1.5 text-xs">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="recurrenceScopeInput"
+                value="single"
+                checked={recurrenceScope === 'single'}
+                onChange={() => setRecurrenceScope('single')}
+                className="text-ink"
+              />
+              <span className="text-ink font-medium">Only this expense</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="recurrenceScopeInput"
+                value="future"
+                checked={recurrenceScope === 'future'}
+                onChange={() => setRecurrenceScope('future')}
+                className="text-ink"
+              />
+              <span className="text-ink font-medium">This and future expenses in series</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="recurrenceScopeInput"
+                value="all"
+                checked={recurrenceScope === 'all'}
+                onChange={() => setRecurrenceScope('all')}
+                className="text-ink"
+              />
+              <span className="text-ink font-medium">All expenses in series</span>
+            </label>
+          </div>
+        </div>
+      )}
+
+      {/* Recurrence section for new expenses */}
+      {!initialData?.id && (
+        <div className="border border-rule p-4 bg-paper space-y-3">
+          <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-ink">
+            <input
+              type="checkbox"
+              checked={isRecurring}
+              onChange={(e) => {
+                setIsRecurring(e.target.checked);
+                if (e.target.checked && (!repeatEndDate || repeatEndDate < spentOn)) {
+                  setRepeatEndDate(endDate || spentOn);
+                }
+              }}
+              className="text-ink"
+            />
+            <span>Repeat expense</span>
+          </label>
+
+          {isRecurring && (
+            <div className="space-y-3 pt-2 border-t border-rule text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="repeatFrequency" className="block text-ink-2 mb-1">
+                    Frequency
+                  </label>
+                  <select
+                    id="repeatFrequency"
+                    value={repeatFrequency}
+                    onChange={(e) =>
+                      setRepeatFrequency(e.target.value as 'daily' | 'weekly' | 'custom')
+                    }
+                    className="w-full border border-rule bg-paper-2 px-2.5 py-1.5 text-xs text-ink focus:border-brick"
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="custom">Every N days</option>
+                  </select>
+                </div>
+
+                {repeatFrequency === 'custom' && (
+                  <div>
+                    <label htmlFor="repeatIntervalDays" className="block text-ink-2 mb-1">
+                      Interval (days)
+                    </label>
+                    <input
+                      id="repeatIntervalDays"
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={repeatIntervalDays}
+                      onChange={(e) =>
+                        setRepeatIntervalDays(Math.max(1, parseInt(e.target.value, 10) || 1))
+                      }
+                      className="w-full border border-rule bg-paper-2 px-2.5 py-1.5 text-xs text-ink focus:border-brick font-mono"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <DateInput
+                id="repeatEndDate"
+                name="repeatEndDate"
+                label="Repeat until"
+                required
+                value={repeatEndDate}
+                min={spentOn}
+                max={endDate || undefined}
+                onChange={(iso) => setRepeatEndDate(iso)}
+              />
+
+              <div className="p-2.5 bg-paper-2 border border-rule text-[11px] font-mono text-ink-2">
+                {formatRecurrenceSummary({
+                  frequency: repeatFrequency,
+                  intervalDays:
+                    repeatFrequency === 'daily'
+                      ? 1
+                      : repeatFrequency === 'weekly'
+                      ? 7
+                      : repeatIntervalDays,
+                  startDate: spentOn,
+                  endDate: repeatEndDate,
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Split Types Tabs */}
       <div className="border border-rule p-4 bg-paper">

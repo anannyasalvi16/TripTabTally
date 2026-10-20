@@ -77,23 +77,22 @@ export function JoinClientView({
                 Go to trip
               </Link>
             </div>
-          ) : !isSignedIn ? (
-            <div className="mt-6 border-t border-rule pt-4">
-              <p className="text-sm text-ink mb-2">
-                Sign in to join this trip and view group expenses.
-              </p>
-              <p className="text-xs text-ink-2 mb-6">
-                Current members on trip: {members.map((m) => m.display_name).join(', ') || 'None yet'}
-              </p>
-              <Link
-                href={`/login?next=/join/${token}`}
-                className="inline-block bg-brick hover:bg-brick-dark text-paper px-5 py-2.5 text-sm font-medium transition-colors"
-              >
-                Sign in to join
-              </Link>
-            </div>
           ) : (
-            <div className="mt-6 space-y-8">
+            <div className="mt-6 space-y-6">
+              {!isSignedIn && (
+                <div className="border border-rule p-3 bg-paper-2 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span className="text-ink-2">
+                    No account needed. Join as a guest now, or sign in to link your account.
+                  </span>
+                  <Link
+                    href={`/login?next=/join/${token}`}
+                    className="text-brick hover:underline font-medium shrink-0"
+                  >
+                    Sign in to link account
+                  </Link>
+                </div>
+              )}
+
               {/* Claim Placeholder Section */}
               {placeholders.length > 0 && (
                 <div className="border border-rule p-4 bg-paper-2">
@@ -122,10 +121,10 @@ export function JoinClientView({
                 </div>
               )}
 
-              {/* Join as New Member Form */}
+              {/* Join as Member Form */}
               <div className="border-t border-rule pt-4">
                 <h2 className="font-serif text-base font-normal text-ink mb-1">
-                  {placeholders.length > 0 ? 'Or join as a new member' : 'Join as a member'}
+                  {placeholders.length > 0 ? 'Or join by entering your name' : 'Enter your name to join'}
                 </h2>
                 <form action={formAction} className="mt-3 space-y-3">
                   <input type="hidden" name="token" value={token} />
@@ -150,7 +149,7 @@ export function JoinClientView({
                     disabled={isPending}
                     className="w-full bg-brick hover:bg-brick-dark text-paper px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
                   >
-                    {isPending ? 'Joining trip...' : 'Join trip'}
+                    {isPending ? 'Joining trip...' : isSignedIn ? 'Join trip' : 'Join trip as guest'}
                   </button>
                 </form>
               </div>

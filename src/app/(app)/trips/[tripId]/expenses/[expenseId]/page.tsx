@@ -106,6 +106,7 @@ export default async function EditExpensePage({ params }: EditExpensePageProps) 
             splitType: expense.split_type as SplitType,
             splitInput: (expense.split_input as Record<string, any>) || {},
             version: expense.version,
+            recurringRuleId: expense.recurring_rule_id || null,
           }}
         />
       </div>

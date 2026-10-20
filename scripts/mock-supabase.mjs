@@ -36,6 +36,8 @@ export function createInitialState() {
       { trip_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', category: 'food', limit_paise: 1500000 },
       { trip_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', category: 'transport', limit_paise: 1000000 },
     ],
+    recurring_rules: [],
+    due_reminders: [],
     invites: [
       {
         token: 'goa2026secretinvitekey128',
@@ -182,6 +184,21 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (pathname === '/auth/v1/signup') {
+    const anonId = `anon-${Date.now()}`;
+    const user = { id: anonId, is_anonymous: true, email: null };
+    db.profiles.push({ id: anonId, display_name: 'Guest Traveler', upi_id: null });
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      access_token: `mock-token-${anonId}`,
+      token_type: 'bearer',
+      expires_in: 3600 * 24 * 30,
+      refresh_token: 'mock-refresh-token',
+      user,
+    }));
+    return;
+  }
+
   if (pathname === '/auth/v1/logout') {
     res.writeHead(200);
     res.end(JSON.stringify({}));
@@ -220,32 +237,39 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/rest/v1/rpc/join_trip') {
     const body = await parseBody(req);
-    const user = getUserFromAuth(req) || { id: '44444444-4444-4444-4444-444444444444' };
-    const invite = db.invites.find((i) => i.token === body.invite_token);
-    if (!invite) {
+    const user = getUserFromAuth(req) || { id: `anon-${Date.now()}` };
+    const token = body.p_token || body.invite_token;
+    const invite = db.invites.find((i) => i.token === token);
+    if (!invite || invite.revoked_at || (invite.expires_at && new Date(invite.expires_at) < new Date())) {
       res.writeHead(400);
-      res.end(JSON.stringify({ message: 'Invalid or expired invite token' }));
+      res.end(JSON.stringify({ ok: false, error: 'Invalid or expired invite token' }));
       return;
     }
-    if (body.claim_member_id) {
-      const ph = db.trip_members.find((m) => m.id === body.claim_member_id);
+    const claimId = body.p_claim_member_id || body.claim_member_id;
+    if (claimId) {
+      const ph = db.trip_members.find((m) => m.id === claimId);
       if (ph) {
         ph.user_id = user.id;
+        if (body.p_display_name) ph.display_name = body.p_display_name;
         res.writeHead(200);
-        res.end(JSON.stringify(invite.trip_id));
+        res.end(JSON.stringify({ ok: true, trip_id: invite.trip_id, member_id: ph.id }));
         return;
       }
     }
+    const newMemberId = `m-${Date.now()}`;
     db.trip_members.push({
-      id: `m-${Date.now()}`,
+      id: newMemberId,
       trip_id: invite.trip_id,
       user_id: user.id,
-      display_name: body.member_name || 'New Member',
+      display_name: body.p_display_name || body.member_name || 'New Member',
       role: 'member',
       left_at: null,
+      family_id: null,
+      email: null,
+      phone: null,
     });
     res.writeHead(200);
-    res.end(JSON.stringify(invite.trip_id));
+    res.end(JSON.stringify({ ok: true, trip_id: invite.trip_id, member_id: newMemberId }));
     return;
   }
 
@@ -328,6 +352,9 @@ const server = http.createServer(async (req, res) => {
         } else if (value.startsWith('is.')) {
           const val = value.replace('is.', '');
           if (val === 'null') results = results.filter((r) => r[key] === null);
+        } else if (value.startsWith('gte.')) {
+          const val = value.replace('gte.', '');
+          results = results.filter((r) => String(r[key]) >= val);
         } else if (value.startsWith('in.')) {
           const raw = value.replace(/^in\.\((.*)\)$/, '$1');
           const list = raw.split(',').map((s) => s.trim().replace(/^"|"$/g, ''));
@@ -426,20 +453,24 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'PATCH') {
       const body = await parseBody(req);
-      let updatedCount = 0;
+      let targets = [...collection];
       for (const [key, value] of url.searchParams.entries()) {
         if (value.startsWith('eq.')) {
           const val = value.replace('eq.', '');
-          for (const item of collection) {
-            if (String(item[key]) === val) {
-              Object.assign(item, body);
-              updatedCount++;
-            }
-          }
+          targets = targets.filter((item) => String(item[key]) === val);
+        } else if (value.startsWith('gte.')) {
+          const val = value.replace('gte.', '');
+          targets = targets.filter((item) => String(item[key]) >= val);
+        } else if (value.startsWith('is.')) {
+          const val = value.replace('is.', '');
+          if (val === 'null') targets = targets.filter((item) => item[key] === null);
         }
       }
+      for (const item of targets) {
+        Object.assign(item, body);
+      }
       res.writeHead(200);
-      res.end(JSON.stringify({ updated: updatedCount }));
+      res.end(JSON.stringify({ updated: targets.length }));
       return;
     }
 

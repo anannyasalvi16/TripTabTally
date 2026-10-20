@@ -31,7 +31,14 @@ export function BalancesSummary({ balances }: BalancesSummaryProps) {
             const owes = b.netPaise < 0;
             return (
               <div key={b.id} className="py-2 flex items-center justify-between">
-                <span className="text-ink font-medium">{b.display_name}</span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-ink font-medium">{b.display_name}</span>
+                  {owes && (
+                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 border border-brick text-brick">
+                      Pending dues
+                    </span>
+                  )}
+                </div>
                 <div className="text-right">
                   {isOwed && (
                     <span className="font-mono tabular-numbers text-moss font-medium">

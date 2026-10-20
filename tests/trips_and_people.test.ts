@@ -231,3 +231,47 @@ describe('Admin Invariant In People Operations', () => {
     expect(remainingAdmins).toBe(1); // Valid
   });
 });
+
+describe('Invite Links Expiry and Revocation', () => {
+  it('treats null expires_at as permanent non-expiring invite', () => {
+    const invite = {
+      token: 'longtokenwithatleast16chars',
+      expires_at: null,
+      revoked_at: null,
+    };
+
+    const isExpired = Boolean(invite.expires_at) && new Date(invite.expires_at!) < new Date();
+    const isRevoked = Boolean(invite.revoked_at);
+    const isValid = !isExpired && !isRevoked;
+
+    expect(isValid).toBe(true);
+  });
+
+  it('rejects expired invites', () => {
+    const pastDate = new Date(Date.now() - 1000 * 60 * 60).toISOString(); // 1 hour ago
+    const invite = {
+      token: 'longtokenwithatleast16chars',
+      expires_at: pastDate,
+      revoked_at: null,
+    };
+
+    const isExpired = Boolean(invite.expires_at) && new Date(invite.expires_at!) < new Date();
+    expect(isExpired).toBe(true);
+  });
+
+  it('rejects revoked invites even if unexpired', () => {
+    const futureDate = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(); // 7 days later
+    const invite = {
+      token: 'longtokenwithatleast16chars',
+      expires_at: futureDate,
+      revoked_at: new Date().toISOString(),
+    };
+
+    const isExpired = Boolean(invite.expires_at) && new Date(invite.expires_at!) < new Date();
+    const isRevoked = Boolean(invite.revoked_at);
+    const isValid = !isExpired && !isRevoked;
+
+    expect(isValid).toBe(false);
+  });
+});
+

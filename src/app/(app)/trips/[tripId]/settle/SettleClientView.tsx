@@ -8,6 +8,13 @@ import {
 } from '@/actions/settlements';
 import { formatPaise, type FamilyBalanceOutput } from '@/lib/money';
 import { buildUpiLink } from '@/lib/upi';
+import {
+  formatDueReminderMessage,
+  getWhatsAppShareUrl,
+  getSmsShareUrl,
+  canSendReminder,
+} from '@/lib/reminders';
+import { recordDueReminderAction } from '@/actions/reminders';
 
 export interface MemberInfo {
   id: string;
@@ -15,11 +22,13 @@ export interface MemberInfo {
   upiId?: string | null;
   familyId?: string | null;
   familyName?: string | null;
+  phone?: string | null;
 }
 
 export interface PlannedPayment {
   fromId: string;
   fromName: string;
+  fromPhone?: string | null;
   toId: string;
   toName: string;
   toUpiId?: string | null;
@@ -60,6 +69,7 @@ interface SettleClientViewProps {
   plannedTransfers: PlannedPayment[];
   plannedFamilyTransfers: PlannedFamilyPayment[];
   recordedSettlements: RecordedSettlement[];
+  recentReminders?: Record<string, string>;
   isAllSettled: boolean;
 }
 
@@ -75,9 +85,18 @@ export function SettleClientView({
   plannedTransfers,
   plannedFamilyTransfers,
   recordedSettlements,
+  recentReminders = {},
   isAllSettled,
 }: SettleClientViewProps) {
   const [viewMode, setViewMode] = useState<'individual' | 'family'>('individual');
+  const [remindersMap, setRemindersMap] = useState<Record<string, string>>(recentReminders);
+  const [activeReminder, setActiveReminder] = useState<PlannedPayment | null>(null);
+  const [reminderStatus, setReminderStatus] = useState<{
+    sending?: boolean;
+    message?: string;
+    error?: string;
+  }>({});
+  const [copiedReminderMsg, setCopiedReminderMsg] = useState(false);
 
   const [recordState, recordAction, isPendingRecord] = useActionState<ActionState | null, FormData>(
     recordSettlementAction,
@@ -99,6 +118,42 @@ export function SettleClientView({
       setTimeout(() => setCopiedUpiId(null), 2500);
     } catch {
       // Fallback
+    }
+  };
+
+  const handleRecordReminder = async (
+    p: PlannedPayment,
+    channel: 'whatsapp' | 'sms' | 'copy'
+  ) => {
+    setReminderStatus({ sending: true });
+    try {
+      const res = await recordDueReminderAction(
+        tripId,
+        p.fromId,
+        p.toId,
+        p.amountPaise,
+        channel
+      );
+      if (res.ok) {
+        setRemindersMap((prev) => ({
+          ...prev,
+          [p.fromId]: new Date().toISOString(),
+        }));
+        setReminderStatus({
+          sending: false,
+          message: 'Reminder sent and recorded. Rate limit: once per day per person.',
+        });
+      } else {
+        setReminderStatus({
+          sending: false,
+          error: res.error || 'Failed to record reminder',
+        });
+      }
+    } catch {
+      setReminderStatus({
+        sending: false,
+        error: 'Network error recording reminder',
+      });
     }
   };
 
@@ -201,11 +256,16 @@ export function SettleClientView({
               const bal = balances[m.id] || 0;
               return (
                 <div key={m.id} className="py-2 flex items-center justify-between">
-                  <div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-medium text-ink">{m.displayName}</span>
                     {m.familyName && (
-                      <span className="text-ink-2 ml-1.5 text-[11px]">
+                      <span className="text-ink-2 text-[11px]">
                         ({m.familyName})
+                      </span>
+                    )}
+                    {bal < 0 && (
+                      <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 border border-brick text-brick">
+                        Pending dues
                       </span>
                     )}
                   </div>
@@ -329,7 +389,36 @@ export function SettleClientView({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {p.amountPaise > 0 && (
+                        (() => {
+                          const lastReminded = remindersMap[p.fromId];
+                          const check = canSendReminder(lastReminded);
+                          if (!check.allowed) {
+                            return (
+                              <span
+                                title="Reminder already sent within the past 24 hours."
+                                className="px-2.5 py-1 text-xs border border-rule text-ink-2 opacity-60 cursor-not-allowed font-mono"
+                              >
+                                Reminded today
+                              </span>
+                            );
+                          }
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveReminder(p);
+                                setReminderStatus({});
+                              }}
+                              className="px-2.5 py-1 text-xs border border-rule text-ink hover:bg-paper-2"
+                            >
+                              Remind
+                            </button>
+                          );
+                        })()
+                      )}
+
                       {upiLink && (
                         <a
                           href={upiLink}
@@ -584,6 +673,148 @@ export function SettleClientView({
           </div>
         )}
       </div>
+
+      {/* Remind Modal */}
+      {activeReminder && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-paper border border-ink p-6 max-w-md w-full space-y-4">
+            <div className="flex justify-between items-baseline border-b border-rule pb-2">
+              <h4 className="font-serif text-lg text-ink font-normal">
+                Send payment reminder
+              </h4>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveReminder(null);
+                  setReminderStatus({});
+                }}
+                className="text-xs text-ink-2 hover:text-ink font-mono"
+              >
+                [Close]
+              </button>
+            </div>
+
+            <div className="text-xs space-y-2">
+              <p className="text-ink">
+                Remind <span className="font-medium">{activeReminder.fromName}</span> about their pending share of{' '}
+                <span className="font-mono font-medium">{formatPaise(activeReminder.amountPaise)}</span> to{' '}
+                <span className="font-medium">{activeReminder.toName}</span>.
+              </p>
+
+              <div className="p-3 bg-paper-2 border border-rule font-mono text-[11px] text-ink whitespace-pre-wrap select-all">
+                {formatDueReminderMessage({
+                  debtorName: activeReminder.fromName,
+                  creditorName: activeReminder.toName,
+                  amountPaise: activeReminder.amountPaise,
+                  tripName,
+                  upiId: activeReminder.toUpiId,
+                })}
+              </div>
+            </div>
+
+            {reminderStatus.message && (
+              <div className="p-2 border border-moss bg-paper text-moss text-xs font-mono">
+                {reminderStatus.message}
+              </div>
+            )}
+            {reminderStatus.error && (
+              <div className="p-2 border border-brick bg-paper text-brick text-xs font-mono">
+                {reminderStatus.error}
+              </div>
+            )}
+
+            <div className="space-y-2 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const msg = formatDueReminderMessage({
+                      debtorName: activeReminder.fromName,
+                      creditorName: activeReminder.toName,
+                      amountPaise: activeReminder.amountPaise,
+                      tripName,
+                      upiId: activeReminder.toUpiId,
+                    });
+                    const url = getWhatsAppShareUrl(msg, activeReminder.fromPhone);
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                    await handleRecordReminder(activeReminder, 'whatsapp');
+                  }}
+                  disabled={reminderStatus.sending}
+                  className="px-3 py-2 border border-rule bg-paper hover:bg-paper-2 text-ink text-center disabled:opacity-50"
+                >
+                  Share via WhatsApp
+                </button>
+
+                {activeReminder.fromPhone ? (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const msg = formatDueReminderMessage({
+                        debtorName: activeReminder.fromName,
+                        creditorName: activeReminder.toName,
+                        amountPaise: activeReminder.amountPaise,
+                        tripName,
+                        upiId: activeReminder.toUpiId,
+                      });
+                      const url = getSmsShareUrl(msg, activeReminder.fromPhone);
+                      window.open(url, '_blank', 'noopener,noreferrer');
+                      await handleRecordReminder(activeReminder, 'sms');
+                    }}
+                    disabled={reminderStatus.sending}
+                    className="px-3 py-2 border border-rule bg-paper hover:bg-paper-2 text-ink text-center disabled:opacity-50"
+                  >
+                    Send SMS
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const msg = formatDueReminderMessage({
+                        debtorName: activeReminder.fromName,
+                        creditorName: activeReminder.toName,
+                        amountPaise: activeReminder.amountPaise,
+                        tripName,
+                        upiId: activeReminder.toUpiId,
+                      });
+                      await navigator.clipboard.writeText(msg);
+                      setCopiedReminderMsg(true);
+                      setTimeout(() => setCopiedReminderMsg(false), 2500);
+                      await handleRecordReminder(activeReminder, 'copy');
+                    }}
+                    disabled={reminderStatus.sending}
+                    className="px-3 py-2 border border-rule bg-paper hover:bg-paper-2 text-ink text-center disabled:opacity-50"
+                  >
+                    {copiedReminderMsg ? 'Copied to clipboard' : 'Copy message'}
+                  </button>
+                )}
+              </div>
+
+              {activeReminder.fromPhone && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const msg = formatDueReminderMessage({
+                      debtorName: activeReminder.fromName,
+                      creditorName: activeReminder.toName,
+                      amountPaise: activeReminder.amountPaise,
+                      tripName,
+                      upiId: activeReminder.toUpiId,
+                    });
+                    await navigator.clipboard.writeText(msg);
+                    setCopiedReminderMsg(true);
+                    setTimeout(() => setCopiedReminderMsg(false), 2500);
+                    await handleRecordReminder(activeReminder, 'copy');
+                  }}
+                  disabled={reminderStatus.sending}
+                  className="w-full px-3 py-1.5 border border-rule text-xs text-ink-2 hover:text-ink text-center disabled:opacity-50"
+                >
+                  {copiedReminderMsg ? 'Copied to clipboard' : 'Copy message text'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

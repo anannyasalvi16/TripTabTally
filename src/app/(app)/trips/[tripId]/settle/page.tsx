@@ -66,6 +66,7 @@ export default async function SettlePage({ params }: SettlePageProps) {
       role,
       user_id,
       family_id,
+      phone,
       profiles:user_id (
         upi_id
       )
@@ -81,12 +82,28 @@ export default async function SettlePage({ params }: SettlePageProps) {
       upiId: profile?.upi_id || null,
       familyId: famId,
       familyName: famId ? familyMap.get(famId) || null : null,
+      phone: m.phone || null,
     };
   });
 
   const memberMap = new Map<string, MemberInfo>();
   for (const m of members) {
     memberMap.set(m.id, m);
+  }
+
+  // Fetch recent due reminders for rate-limiting
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: rawReminders } = await supabase
+    .from('due_reminders')
+    .select('from_member, reminded_at')
+    .eq('trip_id', tripId)
+    .gte('reminded_at', twentyFourHoursAgo);
+
+  const recentReminderMap: Record<string, string> = {};
+  for (const r of rawReminders || []) {
+    if (!recentReminderMap[r.from_member] || recentReminderMap[r.from_member] < r.reminded_at) {
+      recentReminderMap[r.from_member] = r.reminded_at;
+    }
   }
 
   // Fetch non-deleted expenses
@@ -162,6 +179,7 @@ export default async function SettlePage({ params }: SettlePageProps) {
       return {
         fromId: p.from,
         fromName: fromMem?.displayName || 'Member',
+        fromPhone: fromMem?.phone || null,
         toId: p.to,
         toName: toMem?.displayName || 'Member',
         toUpiId: toMem?.upiId || null,
@@ -241,6 +259,7 @@ export default async function SettlePage({ params }: SettlePageProps) {
       plannedTransfers={plannedTransfers}
       plannedFamilyTransfers={plannedFamilyTransfers}
       recordedSettlements={recordedSettlements}
+      recentReminders={recentReminderMap}
       isAllSettled={isAllSettled}
     />
   );

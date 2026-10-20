@@ -9,8 +9,10 @@ import {
   toggleMemberRoleAction,
   markMemberLeftAction,
   regenerateInviteAction,
+  revokeInviteAction,
   type MemberActionResult,
 } from '@/actions/members';
+import { formatPaise } from '@/lib/money';
 
 interface Member {
   id: string;
@@ -37,6 +39,8 @@ interface PeopleViewProps {
   members: Member[];
   families: Family[];
   inviteToken: string | null;
+  inviteExpiresAt?: string | null;
+  memberBalances?: Record<string, number>;
   siteUrl: string;
 }
 
@@ -47,11 +51,16 @@ export function PeopleView({
   members,
   families,
   inviteToken,
+  inviteExpiresAt = null,
+  memberBalances,
   siteUrl,
 }: PeopleViewProps) {
   const [copied, setCopied] = useState(false);
   const [activeToken, setActiveToken] = useState(inviteToken);
+  const [activeExpiresAt, setActiveExpiresAt] = useState<string | null>(inviteExpiresAt);
+  const [selectedExpiry, setSelectedExpiry] = useState<number | null>(14);
   const [regenerating, setRegenerating] = useState(false);
+  const [revoking, setRevoking] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -84,9 +93,14 @@ export function PeopleView({
     setRegenerating(true);
     setStatusMessage(null);
     try {
-      const res = await regenerateInviteAction(tripId);
+      const res = await regenerateInviteAction(tripId, selectedExpiry);
       if (res.ok && res.token) {
         setActiveToken(res.token);
+        const newExpiry =
+          selectedExpiry === null
+            ? null
+            : new Date(Date.now() + selectedExpiry * 86400000).toISOString();
+        setActiveExpiresAt(newExpiry);
         setStatusMessage(res.message || 'New invite link generated.');
       } else {
         setStatusMessage(res.message || 'Could not generate invite link.');
@@ -95,6 +109,28 @@ export function PeopleView({
       setStatusMessage('Failed to generate invite link.');
     } finally {
       setRegenerating(false);
+    }
+  }
+
+  async function handleRevoke() {
+    if (!window.confirm('Revoke this invite link? Nobody will be able to join with it.')) {
+      return;
+    }
+    setRevoking(true);
+    setStatusMessage(null);
+    try {
+      const res = await revokeInviteAction(tripId);
+      if (res.ok) {
+        setActiveToken(null);
+        setActiveExpiresAt(null);
+        setStatusMessage(res.message || 'Invite link revoked.');
+      } else {
+        setStatusMessage(res.message || 'Could not revoke invite link.');
+      }
+    } catch {
+      setStatusMessage('Failed to revoke invite link.');
+    } finally {
+      setRevoking(false);
     }
   }
 
@@ -167,7 +203,7 @@ export function PeopleView({
         </p>
 
         {inviteUrl ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <input
                 id="inviteUrl"
@@ -185,32 +221,102 @@ export function PeopleView({
                 {copied ? 'Copied' : 'Copy link'}
               </button>
             </div>
-            <div className="flex items-center justify-between text-xs text-ink-2">
-              <span>Expires after 14 days</span>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-ink-2 gap-3 pt-1 border-t border-rule">
+              <div>
+                <span className="font-medium text-ink">Status: </span>
+                <span>
+                  {activeExpiresAt
+                    ? `Expires on ${new Date(activeExpiresAt).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}`
+                    : 'Permanent (Never expires)'}
+                </span>
+              </div>
+
               {isAdmin && (
-                <button
-                  type="button"
-                  onClick={handleRegenerate}
-                  disabled={regenerating}
-                  className="text-brick hover:underline disabled:opacity-50"
-                >
-                  {regenerating ? 'Regenerating...' : 'Revoke and get new link'}
-                </button>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <label htmlFor="expirySelect" className="text-ink-2">
+                      Duration:
+                    </label>
+                    <select
+                      id="expirySelect"
+                      value={selectedExpiry === null ? 'never' : String(selectedExpiry)}
+                      onChange={(e) =>
+                        setSelectedExpiry(
+                          e.target.value === 'never' ? null : parseInt(e.target.value, 10)
+                        )
+                      }
+                      className="border border-rule bg-paper-2 px-2 py-1 text-xs text-ink"
+                    >
+                      <option value="1">1 day</option>
+                      <option value="7">7 days</option>
+                      <option value="14">14 days</option>
+                      <option value="30">30 days</option>
+                      <option value="never">Never expires</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleRegenerate}
+                    disabled={regenerating}
+                    className="text-brick hover:underline disabled:opacity-50"
+                  >
+                    {regenerating ? 'Regenerating...' : 'Regenerate link'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleRevoke}
+                    disabled={revoking}
+                    className="text-ink-2 hover:text-brick hover:underline disabled:opacity-50"
+                  >
+                    {revoking ? 'Revoking...' : 'Revoke link'}
+                  </button>
+                </div>
               )}
             </div>
           </div>
         ) : (
-          <div>
-            <p className="text-xs text-ink-2 mb-3">No active invite link.</p>
+          <div className="space-y-3">
+            <p className="text-xs text-ink-2">No active invite link for this trip.</p>
             {isAdmin && (
-              <button
-                type="button"
-                onClick={handleRegenerate}
-                disabled={regenerating}
-                className="bg-brick hover:bg-brick-dark text-paper px-4 py-2 text-xs font-medium transition-colors"
-              >
-                {regenerating ? 'Generating...' : 'Generate invite link'}
-              </button>
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <div className="flex items-center gap-1.5 text-xs">
+                  <label htmlFor="newExpirySelect" className="text-ink-2">
+                    Duration:
+                  </label>
+                  <select
+                    id="newExpirySelect"
+                    value={selectedExpiry === null ? 'never' : String(selectedExpiry)}
+                    onChange={(e) =>
+                      setSelectedExpiry(
+                        e.target.value === 'never' ? null : parseInt(e.target.value, 10)
+                      )
+                    }
+                    className="border border-rule bg-paper-2 px-2 py-1 text-xs text-ink"
+                  >
+                    <option value="1">1 day</option>
+                    <option value="7">7 days</option>
+                    <option value="14">14 days</option>
+                    <option value="30">30 days</option>
+                    <option value="never">Never expires</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleRegenerate}
+                  disabled={regenerating}
+                  className="bg-brick hover:bg-brick-dark text-paper px-4 py-2 text-xs font-medium transition-colors"
+                >
+                  {regenerating ? 'Generating...' : 'Generate invite link'}
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -345,6 +451,11 @@ export function PeopleView({
                     {memberFamily && (
                       <span className="text-[11px] bg-paper-2 border border-rule px-1.5 py-0.5 text-moss font-medium">
                         {memberFamily.name}
+                      </span>
+                    )}
+                    {memberBalances && (memberBalances[member.id] || 0) < 0 && (
+                      <span className="text-[11px] bg-paper-2 border border-brick px-1.5 py-0.5 text-brick font-mono font-medium">
+                        Pending dues: {formatPaise(Math.abs(memberBalances[member.id] || 0))}
                       </span>
                     )}
                   </div>

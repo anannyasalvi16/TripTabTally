@@ -190,7 +190,10 @@ export async function markMemberLeftAction(
   };
 }
 
-export async function regenerateInviteAction(tripId: string): Promise<MemberActionResult> {
+export async function regenerateInviteAction(
+  tripId: string,
+  expiryDays: number | null = 14
+): Promise<MemberActionResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -208,10 +211,16 @@ export async function regenerateInviteAction(tripId: string): Promise<MemberActi
     .is('revoked_at', null);
 
   const token = crypto.randomBytes(16).toString('hex');
+  const expiresAt =
+    expiryDays === null
+      ? null
+      : new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString();
+
   const { error } = await supabase.from('invites').insert({
     token,
     trip_id: tripId,
     created_by: user.id,
+    expires_at: expiresAt,
   });
 
   if (error) {
@@ -223,6 +232,45 @@ export async function regenerateInviteAction(tripId: string): Promise<MemberActi
     ok: true,
     token,
     message: 'Generated a new invite link. Previous links are now inactive.',
+  };
+}
+
+export async function revokeInviteAction(tripId: string): Promise<MemberActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { ok: false, message: 'Authentication required.' };
+  }
+
+  // Verify admin role
+  const { data: currentMember } = await supabase
+    .from('trip_members')
+    .select('role')
+    .eq('trip_id', tripId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (currentMember?.role !== 'admin') {
+    return { ok: false, message: 'Only admins can revoke invite links.' };
+  }
+
+  const { error } = await supabase
+    .from('invites')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('trip_id', tripId)
+    .is('revoked_at', null);
+
+  if (error) {
+    return { ok: false, message: error.message };
+  }
+
+  revalidatePath(`/trips/${tripId}/people`);
+  return {
+    ok: true,
+    message: 'Invite link revoked. Nobody can join with the previous link.',
   };
 }
 
@@ -243,6 +291,31 @@ export async function joinTripAction(
   }
 
   const supabase = await createClient();
+  let {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // If user is not signed in, create an anonymous guest session
+  if (!user) {
+    const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
+    if (anonError) {
+      // If anonymous auth fails or is disabled in project, surface message
+      return {
+        ok: false,
+        message: 'Could not create guest session. Please try signing in.',
+      };
+    }
+    user = anonData.user;
+  }
+
+  if (user && parsed.data.displayName) {
+    // Update profile display name for the newly authenticated/anonymous session
+    await supabase
+      .from('profiles')
+      .update({ display_name: parsed.data.displayName.trim() })
+      .eq('id', user.id);
+  }
+
   const { data, error } = await supabase.rpc('join_trip', {
     p_token: parsed.data.token,
     p_claim_member_id: parsed.data.claimMemberId || null,
@@ -253,7 +326,11 @@ export async function joinTripAction(
     return { ok: false, message: error.message };
   }
 
-  const result = data as { ok?: boolean; trip_id?: string };
+  const result = data as { ok?: boolean; trip_id?: string; error?: string };
+  if (result && !result.ok && result.error) {
+    return { ok: false, message: result.error };
+  }
+
   if (result?.trip_id) {
     revalidatePath(`/trips/${result.trip_id}`);
     redirect(`/trips/${result.trip_id}`);
