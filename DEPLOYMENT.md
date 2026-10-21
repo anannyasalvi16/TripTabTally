@@ -36,20 +36,15 @@ Run the schema and policy migrations in order using the Supabase SQL Editor:
 ### Step 2.3: Configure Authentication
 1. Go to **Authentication** > **Providers** > **Email**.
 2. Ensure Email provider is **Enabled**.
-3. Disable "Confirm email" if using passwordless magic links directly, or customize the email template.
+3. **Turn off "Confirm email"** (set toggle to OFF):
+   - TripTabTally uses direct Email & Password authentication.
+   - Disabling email confirmation allows users to register and sign in immediately with passwords without relying on external SMTP delivery or hitting free-tier email rate limits.
 4. Go to **Authentication** > **URL Configuration**.
 5. Set **Site URL** to your planned Vercel production domain (for example, `https://triptabtally.vercel.app`).
 6. Add the following to **Redirect URLs**:
    - `http://localhost:3000/auth/callback` (for local development)
    - `https://*.vercel.app/auth/callback` (for preview deployments)
    - `https://triptabtally.vercel.app/auth/callback` (for production)
-7. **Custom SMTP (Recommended to eliminate rate limits)**:
-   - Supabase default built-in SMTP enforces a strict limit of 3 emails per hour.
-   - To remove this limit, go to **Project Settings** > **Authentication** > **SMTP Settings**.
-   - Enable Custom SMTP using Resend (`smtp.resend.com`, port 465, username `resend`, password `<your-resend-api-key>`).
-8. If enabling Google OAuth:
-   - In Google Cloud Console, create OAuth 2.0 Client credentials with authorized redirect URI: `https://<your-supabase-project-id>.supabase.co/auth/v1/callback`.
-   - In Supabase Dashboard, enable Google provider and paste Client ID and Client Secret.
 
 ### Step 2.4: Collect Project API Credentials
 1. Go to **Project Settings** > **API**.

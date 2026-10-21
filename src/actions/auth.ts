@@ -1,91 +1,133 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { sanitizeNextUrl } from '@/lib/security';
-
-const emailSchema = z.string().email('Please enter a valid email address.');
+import {
+  emailSchema,
+  passwordSchema,
+  displayNameSchema,
+} from '@/lib/schemas/auth';
 
 export type AuthActionResult = {
   ok: boolean;
   message?: string;
-  url?: string;
 };
 
-export async function signInWithOtp(
+export async function signInWithPassword(
   prevState: AuthActionResult | null,
   formData: FormData
 ): Promise<AuthActionResult> {
   const email = formData.get('email');
+  const password = formData.get('password');
   const rawNext = formData.get('next');
 
-  if (typeof email !== 'string') {
+  if (typeof email !== 'string' || !email.trim()) {
     return { ok: false, message: 'Email address is required.' };
   }
-
-  const parseResult = emailSchema.safeParse(email.trim());
-  if (!parseResult.success) {
-    return { ok: false, message: parseResult.error.errors[0]?.message || 'Invalid email.' };
+  if (typeof password !== 'string' || !password) {
+    return { ok: false, message: 'Password is required.' };
   }
 
-  const validEmail = parseResult.data;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-  const safeNext = sanitizeNextUrl(typeof rawNext === 'string' ? rawNext : null);
-  const emailRedirectTo = `${siteUrl}/auth/callback?next=${encodeURIComponent(safeNext)}`;
+  const emailResult = emailSchema.safeParse(email);
+  if (!emailResult.success) {
+    return { ok: false, message: emailResult.error.errors[0]?.message || 'Please enter a valid email address.' };
+  }
 
+  const safeNext = sanitizeNextUrl(typeof rawNext === 'string' ? rawNext : null);
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithOtp({
-    email: validEmail,
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: emailResult.data,
+    password,
+  });
+
+  if (error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes('invalid login credentials') || msg.includes('invalid credentials')) {
+      return { ok: false, message: 'Invalid email or password. Please check your credentials.' };
+    }
+    if (msg.includes('email not confirmed')) {
+      return {
+        ok: false,
+        message:
+          'Your email address has not been confirmed yet. Please verify your email inbox, or disable email confirmation in your Supabase dashboard.',
+      };
+    }
+    return { ok: false, message: error.message };
+  }
+
+  redirect(safeNext);
+}
+
+export async function signUpWithPassword(
+  prevState: AuthActionResult | null,
+  formData: FormData
+): Promise<AuthActionResult> {
+  const email = formData.get('email');
+  const password = formData.get('password');
+  const displayName = formData.get('displayName');
+  const rawNext = formData.get('next');
+
+  if (typeof email !== 'string' || !email.trim()) {
+    return { ok: false, message: 'Email address is required.' };
+  }
+  if (typeof password !== 'string' || !password) {
+    return { ok: false, message: 'Password is required.' };
+  }
+
+  const emailResult = emailSchema.safeParse(email);
+  if (!emailResult.success) {
+    return { ok: false, message: emailResult.error.errors[0]?.message || 'Please enter a valid email address.' };
+  }
+
+  const passwordResult = passwordSchema.safeParse(password);
+  if (!passwordResult.success) {
+    return { ok: false, message: passwordResult.error.errors[0]?.message || 'Password must be at least 6 characters.' };
+  }
+
+  let validName: string | undefined;
+  if (typeof displayName === 'string' && displayName.trim()) {
+    const nameResult = displayNameSchema.safeParse(displayName);
+    if (!nameResult.success) {
+      return { ok: false, message: nameResult.error.errors[0]?.message || 'Invalid display name.' };
+    }
+    validName = nameResult.data;
+  }
+
+  const safeNext = sanitizeNextUrl(typeof rawNext === 'string' ? rawNext : null);
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.auth.signUp({
+    email: emailResult.data,
+    password: passwordResult.data,
     options: {
-      emailRedirectTo,
+      data: {
+        full_name: validName || emailResult.data.split('@')[0],
+      },
     },
   });
 
   if (error) {
-    const isRateLimit =
-      error.status === 429 ||
-      error.message.toLowerCase().includes('rate limit');
-
-    if (isRateLimit) {
-      return {
-        ok: false,
-        message:
-          'Supabase email rate limit reached (free default SMTP allows 3 emails per hour). Please wait a few minutes, or use Continue with Google below for instant sign-in.',
-      };
+    const msg = error.message.toLowerCase();
+    if (msg.includes('already registered') || msg.includes('user already exists')) {
+      return { ok: false, message: 'An account with this email already exists. Please sign in instead.' };
     }
-
     return { ok: false, message: error.message };
+  }
+
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    return { ok: false, message: 'An account with this email already exists. Please sign in instead.' };
+  }
+
+  if (data.session) {
+    redirect(safeNext);
   }
 
   return {
     ok: true,
-    message: `Magic link sent to ${validEmail}. Check your inbox.`,
+    message: 'Account created! Please check your email to confirm your account, then sign in with your password.',
   };
-}
-
-export async function signInWithGoogle(nextPath?: string): Promise<AuthActionResult> {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-  const safeNext = sanitizeNextUrl(nextPath);
-  const redirectTo = `${siteUrl}/auth/callback?next=${encodeURIComponent(safeNext)}`;
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo,
-    },
-  });
-
-  if (error) {
-    return { ok: false, message: error.message };
-  }
-
-  if (data?.url) {
-    return { ok: true, url: data.url };
-  }
-
-  return { ok: false, message: 'Could not initialize Google sign-in.' };
 }
 
 export async function signOut() {

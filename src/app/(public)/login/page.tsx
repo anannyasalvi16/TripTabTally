@@ -1,9 +1,13 @@
 'use client';
 
-import { Suspense, useActionState, useEffect, useState } from 'react';
+import { Suspense, useActionState, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { signInWithOtp, signInWithGoogle, type AuthActionResult } from '@/actions/auth';
+import {
+  signInWithPassword,
+  signUpWithPassword,
+  type AuthActionResult,
+} from '@/actions/auth';
 import { sanitizeNextUrl } from '@/lib/security';
 
 function LoginForm() {
@@ -11,145 +15,232 @@ function LoginForm() {
   const next = sanitizeNextUrl(searchParams.get('next'));
   const errorParam = searchParams.get('error');
 
-  const [state, formAction, isPending] = useActionState<AuthActionResult | null, FormData>(
-    signInWithOtp,
-    null
-  );
+  const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
 
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [googleError, setGoogleError] = useState<string | null>(null);
-  const [cooldown, setCooldown] = useState(0);
+  const [signInState, signInAction, isSignInPending] = useActionState<
+    AuthActionResult | null,
+    FormData
+  >(signInWithPassword, null);
 
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const timer = setInterval(() => {
-      setCooldown((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [cooldown]);
-
-  useEffect(() => {
-    if (state?.ok) {
-      setCooldown(60);
-    }
-  }, [state]);
-
-  const isRateLimited = Boolean(
-    state && !state.ok && state.message && state.message.toLowerCase().includes('rate limit')
-  );
-
-  async function handleGoogleClick() {
-    setGoogleLoading(true);
-    setGoogleError(null);
-    try {
-      const res = await signInWithGoogle(next);
-      if (res.ok && res.url) {
-        window.location.href = res.url;
-      } else {
-        setGoogleError(res.message || 'Could not connect to Google sign in.');
-      }
-    } catch {
-      setGoogleError('Connection failed. Please try again.');
-    } finally {
-      setGoogleLoading(false);
-    }
-  }
+  const [signUpState, signUpAction, isSignUpPending] = useActionState<
+    AuthActionResult | null,
+    FormData
+  >(signUpWithPassword, null);
 
   return (
     <div className="max-w-form w-full py-8">
       <div className="border-b border-rule pb-4 mb-6">
-        <span className="font-mono text-xs text-ink-2 block mb-2">Sign in</span>
+        <span className="font-mono text-xs text-ink-2 block mb-2">Authentication</span>
         <h1 className="font-serif text-3xl font-normal text-ink">
-          Access your trip ledgers
+          {activeTab === 'signin' ? 'Sign in to your account' : 'Create a new account'}
         </h1>
         <p className="mt-2 text-sm text-ink-2">
-          Enter your email to receive a sign-in link, or continue with Google.
+          {activeTab === 'signin'
+            ? 'Enter your email and password to access your trip ledgers.'
+            : 'Register with your email and password to start managing trip budgets.'}
         </p>
       </div>
 
-      {errorParam && (
-        <div className="mt-4 p-3 border border-brick text-brick text-sm bg-paper-2">
-          Authentication link is invalid or expired. Please request a new link.
-        </div>
-      )}
-
-      {state && !state.ok && state.message && (
-        <div className="mt-4 p-3 border border-brick text-brick text-sm bg-paper-2 space-y-1">
-          <p className="font-medium">{state.message}</p>
-          {isRateLimited && (
-            <p className="text-xs text-ink-2 pt-1 border-t border-rule">
-              Tip: Google authentication below is unaffected by email limits and works immediately.
-            </p>
-          )}
-        </div>
-      )}
-
-      {googleError && (
-        <div className="mt-4 p-3 border border-brick text-brick text-sm bg-paper-2">
-          {googleError}
-        </div>
-      )}
-
-      {state && state.ok && state.message ? (
-        <div className="mt-6 p-4 border border-moss text-moss text-sm bg-paper-2 space-y-2">
-          <p className="font-medium">Link sent</p>
-          <p className="text-ink">{state.message}</p>
-          {cooldown > 0 && (
-            <p className="text-xs text-ink-2">
-              Resend available in {cooldown}s.
-            </p>
-          )}
-        </div>
-      ) : (
-        <form action={formAction} className="mt-6 space-y-4">
-          <input type="hidden" name="next" value={next} />
-
-          <div>
-            <label htmlFor="email" className="block text-xs font-medium text-ink-2 mb-1">
-              Email address
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              required
-              placeholder="name@example.com"
-              className="w-full border border-rule bg-paper-2 px-3 py-2 text-sm text-ink placeholder:text-ink-2 focus:border-brick"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={isPending || cooldown > 0}
-            className="w-full bg-brick hover:bg-brick-dark text-paper px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            {isPending
-              ? 'Sending magic link...'
-              : cooldown > 0
-              ? `Wait ${cooldown}s to resend`
-              : 'Send magic link'}
-          </button>
-        </form>
-      )}
-
-      <div className="my-6 border-t border-rule relative">
-        <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-paper px-2 text-xs text-ink-2">
-          or
-        </span>
+      {/* Tabs */}
+      <div className="flex border-b border-rule mb-6">
+        <button
+          type="button"
+          onClick={() => setActiveTab('signin')}
+          className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors ${
+            activeTab === 'signin'
+              ? 'border-brick text-ink font-semibold'
+              : 'border-transparent text-ink-2 hover:text-ink'
+          }`}
+        >
+          Sign in
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('signup')}
+          className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors ${
+            activeTab === 'signup'
+              ? 'border-brick text-ink font-semibold'
+              : 'border-transparent text-ink-2 hover:text-ink'
+          }`}
+        >
+          Create account
+        </button>
       </div>
 
-      <button
-        type="button"
-        onClick={handleGoogleClick}
-        disabled={googleLoading}
-        className={`w-full border text-ink hover:bg-paper-2 px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50 ${
-          isRateLimited ? 'border-brick bg-paper-2 font-semibold' : 'border-ink'
-        }`}
-      >
-        {googleLoading ? 'Connecting to Google...' : 'Continue with Google'}
-      </button>
+      {errorParam && (
+        <div className="mb-4 p-3 border border-brick text-brick text-sm bg-paper-2">
+          Authentication session was interrupted or invalid. Please sign in again.
+        </div>
+      )}
+
+      {/* Sign in tab form */}
+      {activeTab === 'signin' && (
+        <div>
+          {signInState && !signInState.ok && signInState.message && (
+            <div className="mb-4 p-3 border border-brick text-brick text-sm bg-paper-2">
+              {signInState.message}
+            </div>
+          )}
+
+          <form action={signInAction} className="space-y-4">
+            <input type="hidden" name="next" value={next} />
+
+            <div>
+              <label
+                htmlFor="signin-email"
+                className="block text-xs font-medium text-ink-2 mb-1"
+              >
+                Email address
+              </label>
+              <input
+                id="signin-email"
+                name="email"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                required
+                placeholder="name@example.com"
+                className="w-full border border-rule bg-paper-2 px-3 py-2 text-sm text-ink placeholder:text-ink-2 focus:border-brick"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="signin-password"
+                className="block text-xs font-medium text-ink-2 mb-1"
+              >
+                Password
+              </label>
+              <input
+                id="signin-password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                placeholder="Your password"
+                className="w-full border border-rule bg-paper-2 px-3 py-2 text-sm text-ink placeholder:text-ink-2 focus:border-brick"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSignInPending}
+              className="w-full bg-brick hover:bg-brick-dark text-paper px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {isSignInPending ? 'Signing in...' : 'Sign in'}
+            </button>
+          </form>
+
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => setActiveTab('signup')}
+              className="text-xs text-ink-2 hover:text-ink underline transition-colors"
+            >
+              Do not have an account? Create one here
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Create account tab form */}
+      {activeTab === 'signup' && (
+        <div>
+          {signUpState && !signUpState.ok && signUpState.message && (
+            <div className="mb-4 p-3 border border-brick text-brick text-sm bg-paper-2">
+              {signUpState.message}
+            </div>
+          )}
+
+          {signUpState && signUpState.ok && signUpState.message && (
+            <div className="mb-4 p-4 border border-moss text-moss text-sm bg-paper-2 space-y-1">
+              <p className="font-medium text-moss">Account created</p>
+              <p className="text-ink">{signUpState.message}</p>
+            </div>
+          )}
+
+          <form action={signUpAction} className="space-y-4">
+            <input type="hidden" name="next" value={next} />
+
+            <div>
+              <label
+                htmlFor="signup-name"
+                className="block text-xs font-medium text-ink-2 mb-1"
+              >
+                Your name (optional)
+              </label>
+              <input
+                id="signup-name"
+                name="displayName"
+                type="text"
+                autoComplete="name"
+                maxLength={60}
+                placeholder="e.g. Rohan Mehta"
+                className="w-full border border-rule bg-paper-2 px-3 py-2 text-sm text-ink placeholder:text-ink-2 focus:border-brick"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="signup-email"
+                className="block text-xs font-medium text-ink-2 mb-1"
+              >
+                Email address
+              </label>
+              <input
+                id="signup-email"
+                name="email"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                required
+                placeholder="name@example.com"
+                className="w-full border border-rule bg-paper-2 px-3 py-2 text-sm text-ink placeholder:text-ink-2 focus:border-brick"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="signup-password"
+                className="block text-xs font-medium text-ink-2 mb-1"
+              >
+                Password
+              </label>
+              <input
+                id="signup-password"
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                required
+                minLength={6}
+                placeholder="At least 6 characters"
+                className="w-full border border-rule bg-paper-2 px-3 py-2 text-sm text-ink placeholder:text-ink-2 focus:border-brick"
+              />
+              <span className="text-xs text-ink-2 mt-1 block">
+                Must be at least 6 characters.
+              </span>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSignUpPending}
+              className="w-full bg-brick hover:bg-brick-dark text-paper px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {isSignUpPending ? 'Creating account...' : 'Create account'}
+            </button>
+          </form>
+
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => setActiveTab('signin')}
+              className="text-xs text-ink-2 hover:text-ink underline transition-colors"
+            >
+              Already have an account? Sign in here
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -172,7 +263,7 @@ export default function LoginPage() {
         <Suspense
           fallback={
             <div className="max-w-form w-full border border-rule p-8 bg-paper text-sm text-ink-2">
-              Loading sign in...
+              Loading authentication...
             </div>
           }
         >
@@ -181,7 +272,7 @@ export default function LoginPage() {
       </main>
 
       <footer className="border-t border-rule px-4 py-4 text-center text-xs text-ink-2 space-y-1">
-        <div>No passwords stored. Sessions expire automatically.</div>
+        <div>Secure authentication powered by Supabase.</div>
         <div>Made by Anannya Salvi, 2026</div>
       </footer>
     </div>

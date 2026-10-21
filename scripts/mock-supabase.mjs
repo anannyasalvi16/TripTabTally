@@ -172,7 +172,17 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/auth/v1/token') {
-    const user = { id: '11111111-1111-1111-1111-111111111111', email: 'rohan@example.com' };
+    const body = await parseBody(req);
+    if (body.password === 'wrong-password') {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: 'invalid_grant', error_description: 'Invalid login credentials' }));
+      return;
+    }
+    const user = {
+      id: '11111111-1111-1111-1111-111111111111',
+      email: body.email || 'rohan@example.com',
+      user_metadata: { full_name: 'Rohan Mehta' },
+    };
     res.writeHead(200);
     res.end(JSON.stringify({
       access_token: 'mock-token-rohan',
@@ -185,16 +195,39 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/auth/v1/signup') {
-    const anonId = `anon-${Date.now()}`;
-    const user = { id: anonId, is_anonymous: true, email: null };
-    db.profiles.push({ id: anonId, display_name: 'Guest Traveler', upi_id: null });
+    const body = await parseBody(req);
+    if (body.email === 'alreadyexists@example.com') {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: 'user_already_exists', msg: 'User already registered' }));
+      return;
+    }
+    const userId = `user-${Date.now()}`;
+    const isAnon = !body.email;
+    const user = {
+      id: userId,
+      email: body.email || null,
+      is_anonymous: isAnon,
+      user_metadata: body.data || { full_name: isAnon ? 'Guest Traveler' : 'New User' },
+    };
+    db.profiles.push({
+      id: userId,
+      display_name: (body.data && body.data.full_name) || (body.email ? body.email.split('@')[0] : 'Guest Traveler'),
+      upi_id: null,
+    });
     res.writeHead(200);
     res.end(JSON.stringify({
-      access_token: `mock-token-${anonId}`,
+      access_token: `mock-token-${userId}`,
       token_type: 'bearer',
       expires_in: 3600 * 24 * 30,
       refresh_token: 'mock-refresh-token',
       user,
+      session: {
+        access_token: `mock-token-${userId}`,
+        token_type: 'bearer',
+        expires_in: 3600 * 24 * 30,
+        refresh_token: 'mock-refresh-token',
+        user,
+      },
     }));
     return;
   }
