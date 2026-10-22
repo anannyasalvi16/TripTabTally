@@ -85,7 +85,6 @@ export default function LandingPage() {
             <p className="text-ink font-medium pt-1">Made by Anannya Salvi, 2026</p>
           </div>
           <div className="flex flex-wrap items-baseline gap-4">
-            <span>contact: hello@triptabtally.in</span>
             <span>Version 0.1.0</span>
             <Link href="/login" className="hover:underline text-ink">
               Sign in

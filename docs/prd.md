@@ -243,7 +243,7 @@ Chart colours come from the same palette: ink for bars, brick for anything over 
 
 - Custom favicon and app icon: a simple mark, not the framework default.
 - Page titles are specific ("Goa, Dec 2026 | TripTabTally").
-- Footer on the public pages only: how settlement is calculated, export data, contact address, version. No copyright filler and no dead links. Inside the app there is no footer.
+- Footer on the public pages only: how settlement is calculated, export data, version. No copyright filler and no dead links. Inside the app there is no footer.
 
 ## 11. Copy and voice
 
